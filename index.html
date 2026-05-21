@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Тренажёр по распознаванию фишинга</title>
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, collection, doc, setDoc, onSnapshot, query, orderBy, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  // ── ВСТАВЬ СВОИ ДАННЫЕ ИЗ FIREBASE CONSOLE ──
+  const firebaseConfig = {
+    apiKey: "ТВОЙ_API_KEY",
+    authDomain: "ТВОЙ_PROJECT.firebaseapp.com",
+    projectId: "ТВОЙ_PROJECT_ID",
+    storageBucket: "ТВОЙ_PROJECT.appspot.com",
+    messagingSenderId: "ТВОЙ_SENDER_ID",
+    appId: "ТВОЙ_APP_ID"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getFirestore(app);
+
+  // Expose to global scope
+  window._db = db;
+  window._fsLib = { collection, doc, setDoc, onSnapshot, query, orderBy, deleteDoc, getDocs };
+  window._fbReady = true;
+  window.dispatchEvent(new Event('fbReady'));
+</script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+[data-theme="dark"]{--bg:#0a0f1a;--sf:#111827;--sf2:#1a2235;--ac:#00e5ff;--ac2:#ff4757;--ac3:#ffd93d;--ac4:#2ed573;--tx:#e8eaf0;--txd:#7a8499;--cb:#0d1520;--ok:#2ed573;--err:#ff4757;--border:rgba(255,255,255,.06);--nav-bg:rgba(10,15,26,.92);--hero-g1:rgba(0,229,255,.12);--hero-g2:rgba(255,71,87,.1);--grid-c:rgba(0,229,255,.04);--code-hdr:rgba(255,255,255,.03);--code-sep:rgba(255,255,255,.05)}
+[data-theme="light"]{--bg:#f0f4f8;--sf:#ffffff;--sf2:#e8eef5;--ac:#0090a8;--ac2:#cc2233;--ac3:#c49000;--ac4:#1a9e50;--tx:#1a2235;--txd:#5a6880;--cb:#e4eaf2;--ok:#1a9e50;--err:#cc2233;--border:rgba(0,0,0,.08);--nav-bg:rgba(240,244,248,.92);--hero-g1:rgba(0,144,168,.08);--hero-g2:rgba(204,34,51,.07);--grid-c:rgba(0,144,168,.04);--code-hdr:rgba(0,0,0,.03);--code-sep:rgba(0,0,0,.06)}
+
+html{scroll-behavior:smooth;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+input,button,select,textarea{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+code,pre,.dcode,.dcon,.pgo{font-variant-ligatures:none!important;-webkit-font-feature-settings:"liga" 0,"calt" 0!important;font-feature-settings:"liga" 0,"calt" 0!important}
+body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--tx);line-height:1.7;overflow-x:hidden;transition:background .3s,color .3s}
+::selection{background:var(--ac2);color:#fff}
+
+/* PROGRESS */
+.progress-bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--ac),var(--ac2));z-index:200;transition:width .15s;width:0}
+
+/* XP BAR */
+.xp-hud{position:fixed;top:8px;right:60px;z-index:150;display:flex;align-items:center;gap:8px;background:var(--nav-bg);border:1px solid var(--border);border-radius:100px;padding:5px 14px;font-size:.8rem;font-weight:800;backdrop-filter:blur(12px)}
+.xp-hud .xp-icon{color:var(--ac3)}
+.xp-hud .xp-val{color:var(--ac3)}
+.xp-hud .xp-bar-wrap{width:80px;height:6px;background:var(--cb);border-radius:3px;overflow:hidden}
+.xp-hud .xp-bar-fill{height:100%;background:linear-gradient(90deg,var(--ac3),var(--ac));border-radius:3px;transition:width .4s}
+
+/* HERO */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;position:relative;overflow:hidden;padding:2rem}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 600px 400px at 30% 40%,var(--hero-g1),transparent),radial-gradient(ellipse 500px 350px at 70% 60%,var(--hero-g2),transparent)}
+.hero-grid{position:absolute;inset:0;background-image:linear-gradient(var(--grid-c) 1px,transparent 1px),linear-gradient(90deg,var(--grid-c) 1px,transparent 1px);background-size:60px 60px;animation:gm 20s linear infinite}
+@keyframes gm{to{transform:translate(60px,60px)}}
+.hero h1{font-size:clamp(2.5rem,7vw,4.5rem);font-weight:900;position:relative;z-index:1;background:linear-gradient(135deg,var(--ac),var(--ac2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:.5rem}
+.hero .sub{font-size:clamp(1rem,2.5vw,1.3rem);color:var(--txd);position:relative;z-index:1;max-width:600px}
+.hero .badge{display:inline-flex;align-items:center;gap:8px;background:var(--sf);border:1px solid rgba(255,71,87,.3);padding:8px 20px;border-radius:100px;font-family:'JetBrains Mono',monospace;font-size:.9rem;color:var(--ac2);position:relative;z-index:1}
+.hero .scroll-h{position:absolute;bottom:2rem;z-index:1;animation:bn 2s infinite;color:var(--txd);font-size:.85rem}
+.hero-row{display:flex;align-items:center;gap:12px;position:relative;z-index:1;margin-top:1.5rem}
+.hero-theme{display:none}
+@keyframes bn{0%,100%{transform:translateY(0)}50%{transform:translateY(8px)}}
+
+/* SCAN animation */
+.hero-scan{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.scan-line{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--ac),transparent);opacity:.3;animation:scan 4s linear infinite}
+@keyframes scan{0%{top:-10px}100%{top:100%}}
+
+/* NAV */
+.nav{position:sticky;top:0;z-index:100;background:var(--nav-bg);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 1rem;display:flex;align-items:center;overflow-x:auto;gap:0}
+.nav a{color:var(--txd);text-decoration:none;padding:14px 13px;font-size:.82rem;font-weight:700;transition:color .2s;white-space:nowrap}
+.nav a:hover,.nav a.active{color:var(--ac)}
+.theme-toggle{background:none;border:1px solid var(--border);color:var(--tx);font-size:1.1rem;width:36px;height:36px;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-left:auto;flex-shrink:0;transition:background .2s}
+.theme-toggle:hover{background:var(--sf2)}
+
+/* SECTIONS */
+.sec{max-width:1100px;margin:0 auto;padding:4rem 1.5rem}
+.sec-t{font-size:clamp(1.5rem,4vw,2.3rem);font-weight:900;margin-bottom:.5rem}
+.hl{background:linear-gradient(135deg,var(--ac),var(--ac2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+
+.sec-d{color:var(--txd);font-size:1.02rem;margin-bottom:2.5rem;max-width:700px}
+
+/* CARDS */
+.card{background:var(--sf);border:1px solid var(--border);border-radius:16px;padding:2rem;margin-bottom:1.5rem;transition:border-color .3s}
+.card:hover{border-color:rgba(0,229,255,.2)}
+.cl{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:2px;padding:4px 12px;border-radius:100px;margin-bottom:1rem}
+.cl.syn{background:rgba(0,229,255,.15);color:var(--ac)}.cl.ex{background:rgba(255,71,87,.15);color:var(--ac2)}.cl.tip{background:rgba(255,217,61,.15);color:var(--ac3)}.cl.ok-lbl{background:rgba(46,213,115,.15);color:var(--ac4)}
+.card h3{font-size:1.25rem;font-weight:800;margin-bottom:1rem}
+
+/* CODE BLOCKS */
+.codeblock{background:var(--cb);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:1rem 0}
+.codeblock .hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--code-hdr);border-bottom:1px solid var(--code-sep)}
+.dots{display:flex;gap:6px}.dots span{width:10px;height:10px;border-radius:50%}.dots span:nth-child(1){background:#ff5f57}.dots span:nth-child(2){background:#ffbd2e}.dots span:nth-child(3){background:#28c840}
+.codeblock .fname{font-family:'JetBrains Mono',monospace;font-size:.75rem;color:var(--txd)}
+.codeblock pre{padding:16px 20px;overflow-x:auto;margin:0;font-family:'JetBrains Mono',monospace;font-size:.84rem;line-height:1.9;color:var(--tx);white-space:pre}
+
+/* TABS */
+.tabs{display:flex;gap:4px;margin-bottom:1.5rem;background:var(--cb);border-radius:12px;padding:4px;flex-wrap:wrap}
+.tb{background:transparent;border:none;color:var(--txd);font-family:'Nunito',sans-serif;font-size:.85rem;font-weight:700;padding:10px 20px;border-radius:10px;cursor:pointer;transition:all .2s}
+.tb:hover{color:var(--tx)}.tb.active{background:var(--ac2);color:#fff}
+.tp{display:none}.tp.active{display:block}
+
+/* BUTTONS */
+.rb{background:linear-gradient(135deg,var(--ac2),#cc2040);border:none;color:#fff;font-family:'Nunito',sans-serif;font-weight:800;font-size:.85rem;padding:10px 24px;border-radius:10px;cursor:pointer;transition:transform .15s,box-shadow .15s;display:inline-flex;align-items:center;gap:6px}
+.rb:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(255,71,87,.4)}
+.rb.safe{background:linear-gradient(135deg,var(--ac4),#1a8040)}
+.rb.safe:hover{box-shadow:0 4px 20px rgba(46,213,115,.4)}
+
+/* TABLES */
+.ct{width:100%;border-collapse:separate;border-spacing:0;border-radius:12px;overflow:hidden;margin:1.5rem 0}
+.ct th,.ct td{padding:12px 16px;text-align:left;font-size:.88rem}
+.ct th{background:rgba(255,71,87,.12);font-weight:800;color:var(--ac2);font-size:.78rem;text-transform:uppercase;letter-spacing:1px}
+.ct td{background:var(--sf);border-bottom:1px solid var(--border)}
+.ct tr:last-child td{border-bottom:none}
+.ct code{font-family:'JetBrains Mono',monospace;font-size:.82rem;background:var(--cb);padding:3px 8px;border-radius:6px}
+
+/* ACCORDION */
+.acc-item{background:var(--sf);border:1px solid var(--border);border-radius:12px;margin-bottom:.75rem;overflow:hidden;transition:border-color .3s}
+.acc-item:hover{border-color:rgba(0,229,255,.2)}
+.acc-hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;cursor:pointer;font-weight:700;font-size:.95rem;user-select:none}
+.acc-hdr .acc-icon{font-size:1.2rem;margin-right:12px}
+.acc-hdr .acc-arr{transition:transform .3s;color:var(--txd);font-size:1rem}
+.acc-item.open .acc-arr{transform:rotate(180deg)}
+.acc-body{max-height:0;overflow:hidden;transition:max-height .4s ease}
+.acc-item.open .acc-body{max-height:800px}
+.acc-content{padding:0 20px 20px;color:var(--txd);font-size:.92rem;line-height:1.8}
+
+/* EMAIL SIMULATOR */
+.email-client{background:var(--sf);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin:1.5rem 0;font-size:.9rem}
+.email-toolbar{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--cb);border-bottom:1px solid var(--border)}
+.email-toolbar .et-dot{width:12px;height:12px;border-radius:50%;background:var(--sf2)}
+.email-toolbar .et-addr{flex:1;background:var(--sf);border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--txd)}
+.email-header{padding:16px 20px;border-bottom:1px solid var(--border)}
+.email-header .eh-row{display:flex;gap:8px;margin-bottom:6px;font-size:.85rem}
+.email-header .eh-lbl{color:var(--txd);min-width:50px;font-weight:700}
+.email-header .eh-val{color:var(--tx);flex:1}
+.email-header .eh-val.suspicious{color:var(--ac2);text-decoration:underline dotted;cursor:help;position:relative}
+.email-header .eh-subj{font-size:1.1rem;font-weight:800;margin-top:8px}
+.email-body{padding:20px;line-height:1.9;color:var(--tx)}
+.email-body .suspicious-link{color:var(--ac2);text-decoration:underline;cursor:pointer;position:relative}
+.email-body .suspicious-link:hover::after{content:attr(data-url);position:absolute;bottom:100%;left:0;background:#1a0a0f;border:1px solid var(--ac2);color:var(--ac2);font-family:'JetBrains Mono',monospace;font-size:.72rem;padding:4px 10px;border-radius:6px;white-space:nowrap;z-index:10;pointer-events:none}
+.email-body .phish-marker{background:rgba(255,71,87,.12);border:1px dashed rgba(255,71,87,.4);border-radius:4px;padding:0 4px;cursor:pointer;position:relative}
+.email-body .phish-marker:hover{background:rgba(255,71,87,.2)}
+.email-actions{display:flex;gap:10px;padding:16px 20px;border-top:1px solid var(--border);background:var(--cb)}
+
+/* SMS BUBBLE */
+.sms-wrap{background:var(--cb);border:1px solid var(--border);border-radius:16px;padding:20px;margin:1.5rem 0;max-width:480px}
+.sms-bubble{background:var(--sf);border:1px solid var(--border);border-radius:16px 16px 16px 4px;padding:14px 18px;margin-bottom:10px;font-size:.9rem;position:relative}
+.sms-bubble.phish{border-color:rgba(255,71,87,.3);background:rgba(255,71,87,.05)}
+.sms-sender{font-family:'JetBrains Mono',monospace;font-size:.75rem;color:var(--txd);margin-bottom:6px;font-weight:700}
+.sms-time{font-size:.72rem;color:var(--txd);text-align:right;margin-top:6px}
+
+/* FAKE LOGIN PAGE */
+.fake-login{background:var(--sf);border:2px solid rgba(255,71,87,.3);border-radius:16px;overflow:hidden;margin:1.5rem 0;max-width:420px}
+.fake-login .fl-bar{background:var(--cb);padding:10px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)}
+.fake-login .fl-url{flex:1;background:var(--sf2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:.75rem;color:var(--ac2)}
+.fake-login .fl-lock{color:var(--ac2);font-size:.9rem}
+.fake-login .fl-body{padding:28px;text-align:center}
+.fake-login .fl-logo{font-size:2rem;margin-bottom:.5rem}
+.fake-login .fl-title{font-weight:800;font-size:1.1rem;margin-bottom:1.5rem}
+.fake-login input{width:100%;padding:10px 14px;background:var(--cb);border:1px solid var(--border);border-radius:10px;color:var(--tx);font-family:'Nunito',sans-serif;font-size:.9rem;margin-bottom:10px;outline:none}
+.fake-login .fl-btn{width:100%;padding:12px;background:linear-gradient(135deg,#1a6de6,#0050cc);border:none;color:#fff;border-radius:10px;font-weight:800;font-size:.95rem;cursor:pointer;margin-bottom:10px}
+.fake-login .fl-fine{font-size:.72rem;color:var(--txd);line-height:1.6}
+
+/* STEP DEBUGGER */
+.dw{background:var(--sf);border:2px solid rgba(0,229,255,.2);border-radius:16px;overflow:hidden;margin:1.5rem 0}
+.dtb{display:flex;align-items:center;gap:8px;padding:12px 20px;background:rgba(0,229,255,.06);border-bottom:1px solid rgba(0,229,255,.15);flex-wrap:wrap}
+.dtb .tt{font-weight:800;font-size:.9rem;margin-right:auto}
+.dbtn{background:rgba(0,229,255,.15);border:1px solid rgba(0,229,255,.3);color:var(--ac);font-family:'Nunito',sans-serif;font-weight:800;font-size:.8rem;padding:7px 16px;border-radius:8px;cursor:pointer;transition:all .2s}
+.dbtn:hover{background:rgba(0,229,255,.25)}
+.dbtn.rs{background:rgba(255,255,255,.06);border-color:var(--border);color:var(--txd)}
+.dbd{display:grid;grid-template-columns:1.4fr 1fr;min-height:260px}
+.dcode{padding:0;font-family:'JetBrains Mono',monospace;font-size:.84rem;line-height:2.1;border-right:1px solid var(--border);overflow-x:auto}
+.dline{display:flex;padding:1px 16px;transition:background .3s;position:relative}
+.dline.hl{background:rgba(255,71,87,.12)}
+.dline.hl::before{content:'▶';position:absolute;left:4px;color:var(--ac2);font-size:.7rem;top:50%;transform:translateY(-50%)}
+.dline.ex{background:rgba(0,229,255,.05)}
+.dlinenum{color:var(--txd);width:28px;text-align:right;margin-right:14px;user-select:none;flex-shrink:0}
+.dlinetext{white-space:pre}
+.dpanel{padding:14px 18px;background:var(--cb);font-size:.84rem;overflow-y:auto}
+.dst{font-family:'Nunito',sans-serif;font-size:.72rem;font-weight:700;color:var(--txd);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;margin-top:14px}
+.dst:first-child{margin-top:0}
+.dvar{display:flex;justify-content:space-between;padding:4px 8px;background:var(--sf2);border-radius:6px;margin-bottom:4px;font-family:'JetBrains Mono',monospace}
+.dvar .dn{color:var(--ac3)}.dvar .dv{color:var(--ac)}
+.dcon{margin-top:8px;padding:8px 10px;background:rgba(0,0,0,.2);border-radius:8px;min-height:36px;font-family:'JetBrains Mono',monospace;font-size:.82rem}
+[data-theme="light"] .dcon{background:rgba(0,0,0,.04)}
+.dcl{color:var(--ok);padding:2px 0;animation:fi .3s}
+.dcl.warn{color:var(--err)}
+
+/* QUIZ */
+.qcard{background:var(--sf);border:2px solid var(--border);border-radius:16px;padding:2rem;margin-bottom:1.5rem}
+.qq{font-size:1.02rem;font-weight:700;margin-bottom:1.2rem}
+.qq .qn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--ac2);color:#fff;font-size:.8rem;font-weight:800;margin-right:8px}
+.qos{display:flex;flex-direction:column;gap:8px}
+.qo{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--cb);border:2px solid transparent;border-radius:12px;cursor:pointer;transition:all .2s;font-size:.9rem}
+.qo:hover{border-color:rgba(255,71,87,.3)}
+.qo.qok{border-color:var(--ok);background:rgba(46,213,115,.1);pointer-events:none}
+.qo.qwr{border-color:var(--err);background:rgba(255,71,87,.1);pointer-events:none}
+.qo.off{pointer-events:none;opacity:.7}
+.qo .lt{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.8rem;background:var(--sf2);flex-shrink:0}
+.qo.qok .lt{background:var(--ok);color:#fff}.qo.qwr .lt{background:var(--err);color:#fff}
+.qfb{margin-top:1rem;padding:12px 16px;border-radius:10px;font-size:.88rem;font-weight:600;display:none}
+.qfb.show{display:block}.qfb.qfc{background:rgba(46,213,115,.1);color:var(--ok)}.qfb.qfw{background:rgba(255,71,87,.1);color:var(--err)}
+.qresult{display:none;padding:28px;background:var(--sf);border:2px solid rgba(255,71,87,.3);border-radius:16px;margin-top:2rem;text-align:center}
+.qresult.show{display:block}
+.qresult .big{font-size:3rem;margin-bottom:.5rem}
+.qresult h3{font-size:1.4rem;font-weight:900;margin-bottom:.3rem}
+.qresult .sub{color:var(--txd);margin-bottom:1rem}
+.qresult .btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.qresult .btns button{font-family:'Nunito',sans-serif;font-weight:800;font-size:.85rem;padding:10px 24px;border-radius:10px;cursor:pointer;border:none;transition:transform .15s}
+.qresult .btns button:hover{transform:translateY(-2px)}
+.qresult .btns .retry{background:linear-gradient(135deg,var(--ac2),#cc2040);color:#fff}
+.qresult .btns .reset{background:var(--sf2);border:1px solid var(--border);color:var(--tx)}
+
+/* DIFFICULTY BADGE */
+.diff-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:100px;font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:1px}
+.diff-badge.easy{background:rgba(46,213,115,.15);color:var(--ac4)}
+.diff-badge.med{background:rgba(255,217,61,.15);color:var(--ac3)}
+.diff-badge.hard{background:rgba(255,71,87,.15);color:var(--ac2)}
+
+/* TRAINER CHALLENGE */
+.challenge{background:var(--sf);border:1px solid var(--border);border-radius:16px;margin-bottom:1.5rem;overflow:hidden}
+.ch-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:var(--cb)}
+.ch-header .ch-title{font-weight:800;font-size:.95rem}
+.ch-body{padding:20px}
+.ch-question{font-size:.95rem;color:var(--txd);margin-bottom:14px;font-weight:600}
+.ch-choices{display:flex;gap:10px;flex-wrap:wrap}
+.ch-choice{padding:10px 22px;border-radius:10px;border:2px solid var(--border);background:var(--cb);cursor:pointer;font-weight:700;font-size:.88rem;transition:all .2s}
+.ch-choice:hover{border-color:rgba(0,229,255,.4)}
+.ch-choice.phish-btn{border-color:rgba(255,71,87,.3);color:var(--ac2)}
+.ch-choice.phish-btn:hover{background:rgba(255,71,87,.1)}
+.ch-choice.safe-btn{border-color:rgba(46,213,115,.3);color:var(--ac4)}
+.ch-choice.safe-btn:hover{background:rgba(46,213,115,.1)}
+.ch-choice.selected-wrong{border-color:var(--err);background:rgba(255,71,87,.15);pointer-events:none}
+.ch-choice.selected-right{border-color:var(--ok);background:rgba(46,213,115,.15);pointer-events:none}
+.ch-choice.reveal-right{border-color:var(--ok) !important;background:rgba(46,213,115,.1);pointer-events:none}
+.ch-feedback{margin-top:14px;padding:12px 16px;border-radius:10px;font-size:.88rem;font-weight:600;display:none}
+.ch-feedback.show{display:block}
+.ch-feedback.ok{background:rgba(46,213,115,.1);color:var(--ok)}
+.ch-feedback.bad{background:rgba(255,71,87,.1);color:var(--err)}
+.ch-score-delta{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:.8rem;padding:2px 8px;border-radius:6px;margin-left:8px;background:rgba(255,217,61,.15);color:var(--ac3)}
+
+/* FIND MARKERS */
+.find-game{background:var(--sf);border:1px solid var(--border);border-radius:16px;padding:20px;margin:1.5rem 0}
+.find-game .fg-q{font-weight:700;margin-bottom:14px;color:var(--txd)}
+.marker-target{display:inline-block;padding:2px 6px;border-radius:4px;cursor:pointer;border:1px dashed transparent;transition:all .2s;position:relative}
+.marker-target:hover{border-color:rgba(0,229,255,.4);background:rgba(0,229,255,.05)}
+.marker-target.found{background:rgba(255,71,87,.15);border-color:var(--ac2) !important;border-style:solid !important}
+.marker-target.missed{background:rgba(255,217,61,.1);border-color:var(--ac3);border-style:solid !important}
+.fg-score{display:inline-flex;align-items:center;gap:6px;margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:.85rem;padding:6px 14px;background:var(--cb);border-radius:8px}
+
+/* ADMIN PANEL */
+.admin-section{background:var(--sf);border:2px solid rgba(255,217,61,.2);border-radius:16px;padding:24px;margin-top:2rem}
+.admin-section h3{font-size:1.2rem;font-weight:800;margin-bottom:1rem;display:flex;align-items:center;gap:8px}
+.admin-form label{display:block;font-size:.82rem;color:var(--txd);margin-bottom:5px;font-weight:700;margin-top:14px}
+.admin-form input,.admin-form textarea,.admin-form select{width:100%;padding:10px 14px;background:var(--cb);border:1px solid var(--border);border-radius:10px;color:var(--tx);font-family:'Nunito',sans-serif;font-size:.9rem;outline:none;transition:border-color .2s;resize:vertical}
+.admin-form input:focus,.admin-form textarea:focus,.admin-form select:focus{border-color:var(--ac3)}
+.admin-form textarea{min-height:80px}
+.admin-btn{background:linear-gradient(135deg,var(--ac3),#c49000);border:none;color:#000;font-family:'Nunito',sans-serif;font-weight:800;font-size:.88rem;padding:10px 24px;border-radius:10px;cursor:pointer;transition:transform .15s;margin-top:14px}
+.admin-btn:hover{transform:translateY(-1px)}
+.admin-list{margin-top:14px}
+.admin-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--cb);border-radius:10px;margin-bottom:8px;font-size:.88rem}
+.admin-item .ai-del{background:rgba(255,71,87,.15);border:1px solid rgba(255,71,87,.3);color:var(--ac2);padding:4px 12px;border-radius:6px;font-weight:700;font-size:.78rem;cursor:pointer;transition:background .2s}
+.admin-item .ai-del:hover{background:rgba(255,71,87,.25)}
+.admin-tabs{display:flex;gap:4px;margin-bottom:1.5rem;background:var(--cb);border-radius:12px;padding:4px}
+.admin-tb{background:transparent;border:none;color:var(--txd);font-family:'Nunito',sans-serif;font-size:.85rem;font-weight:700;padding:10px 20px;border-radius:10px;cursor:pointer;transition:all .2s}
+.admin-tb.active{background:var(--ac3);color:#000}
+.admin-tp{display:none}.admin-tp.active{display:block}
+.results-table{width:100%;border-collapse:separate;border-spacing:0;border-radius:12px;overflow:hidden;font-size:.85rem}
+.results-table th{background:rgba(255,217,61,.12);color:var(--ac3);font-weight:800;padding:10px 14px;text-align:left}
+.results-table td{background:var(--sf);padding:10px 14px;border-bottom:1px solid var(--border)}
+
+/* MISC */
+.three{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1.5rem 0}
+.mc{background:var(--sf);border:1px solid var(--border);border-radius:16px;padding:1.5rem;text-align:center;transition:transform .3s,border-color .3s}
+.mc:hover{transform:translateY(-4px);border-color:rgba(0,229,255,.2)}
+.mc .ic{font-size:2.2rem;margin-bottom:.7rem}.mc h4{font-size:1rem;font-weight:800;margin-bottom:.4rem}.mc p{font-size:.85rem;color:var(--txd)}
+.ib{display:flex;gap:14px;padding:16px 18px;border-radius:12px;margin:1rem 0;font-size:.9rem;line-height:1.6}
+.ib.inf{background:rgba(0,229,255,.07);border-left:4px solid var(--ac)}
+.ib.wrn{background:rgba(255,217,61,.07);border-left:4px solid var(--ac3)}
+.ib.err{background:rgba(255,71,87,.07);border-left:4px solid var(--ac2)}
+.ib .ic{font-size:1.1rem;flex-shrink:0;padding-top:2px}
+.fin{opacity:0;transform:translateY(24px);transition:opacity .6s,transform .6s}.fin.vis{opacity:1;transform:none}
+.footer{text-align:center;padding:3rem 1rem;color:var(--txd);font-size:.85rem;border-top:1px solid var(--border)}
+.pgo{font-family:'JetBrains Mono',monospace;font-size:.84rem;background:var(--cb);overflow-y:auto;padding:16px 20px}
+.pgo .lbl{font-family:'Nunito',sans-serif;font-size:.72rem;color:var(--txd);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.ol{padding:2px 0;animation:fi .3s}
+@keyframes fi{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+.ol.ok{color:var(--ok)}.ol.er{color:var(--err)}
+.score-stat{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:var(--sf);border:1px solid var(--border);border-radius:10px;font-size:.88rem;font-weight:700}
+
+/* LOGIN OVERLAY */
+.login-overlay{position:fixed;inset:0;z-index:9999;background:#0a0f1a;display:flex;align-items:center;justify-content:center;padding:1rem}
+.login-box{background:#111827;border:1px solid rgba(0,229,255,.2);border-radius:20px;padding:40px 36px;max-width:420px;width:100%;text-align:center;box-shadow:0 0 60px rgba(0,229,255,.06)}
+.login-box .lb-grid{position:absolute;inset:0;border-radius:20px;background-image:linear-gradient(rgba(0,229,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none}
+.login-box{position:relative;overflow:hidden}
+.login-title{font-size:1.8rem;font-weight:900;background:linear-gradient(135deg,#00e5ff,#ff4757);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:.3rem}
+.login-sub{color:#7a8499;font-size:.9rem;margin-bottom:2rem}
+.login-box input{width:100%;padding:14px 18px;background:#0d1520;border:1px solid rgba(255,255,255,.08);border-radius:12px;color:#e8eaf0;font-family:'Nunito',sans-serif;font-size:1rem;outline:none;margin-bottom:12px;transition:border-color .2s;text-align:center}
+.login-box input:focus{border-color:rgba(0,229,255,.4)}
+.login-box .lb-btn{width:100%;padding:14px;background:linear-gradient(135deg,#00e5ff,#0090a8);border:none;color:#000;font-family:'Nunito',sans-serif;font-weight:900;font-size:1rem;border-radius:12px;cursor:pointer;transition:transform .15s,box-shadow .2s;margin-bottom:10px}
+.login-box .lb-btn:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(0,229,255,.3)}
+.login-box .lb-admin-link{color:#7a8499;font-size:.82rem;cursor:pointer;text-decoration:underline;display:block;margin-top:6px}
+.login-box .lb-admin-link:hover{color:#00e5ff}
+.login-badge{background:rgba(255,71,87,.12);border:1px solid rgba(255,71,87,.25);color:#ff4757;padding:6px 16px;border-radius:100px;font-size:.78rem;font-weight:700;display:inline-block;margin-bottom:1.5rem}
+
+/* ADMIN LOGIN */
+.admin-login-form{background:rgba(255,217,61,.06);border:1px solid rgba(255,217,61,.2);border-radius:12px;padding:16px;margin-top:14px;display:none}
+.admin-login-form.show{display:block}
+.admin-login-form input{width:100%;padding:10px 14px;background:#0d1520;border:1px solid rgba(255,255,255,.08);border-radius:10px;color:#e8eaf0;font-family:'Nunito',sans-serif;font-size:.9rem;outline:none;margin-bottom:8px;transition:border-color .2s}
+.admin-login-form input:focus{border-color:rgba(255,217,61,.4)}
+.admin-login-form .alb{width:100%;padding:10px;background:linear-gradient(135deg,#ffd93d,#c49000);border:none;color:#000;font-family:'Nunito',sans-serif;font-weight:800;font-size:.88rem;border-radius:10px;cursor:pointer}
+.admin-login-err{color:#ff4757;font-size:.8rem;margin-top:6px;display:none}
+
+/* LEADERBOARD */
+.lb-wrap{background:var(--sf);border:1px solid rgba(255,217,61,.2);border-radius:16px;overflow:hidden}
+.lb-header{display:flex;align-items:center;gap:10px;padding:14px 20px;background:rgba(255,217,61,.06);border-bottom:1px solid rgba(255,217,61,.1);font-weight:800;font-size:1rem}
+.lb-row{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);transition:background .2s}
+.lb-row:hover{background:var(--sf2)}
+.lb-row:last-child{border-bottom:none}
+.lb-rank{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:.85rem;flex-shrink:0}
+.lb-rank.r1{background:linear-gradient(135deg,#ffd93d,#c49000);color:#000}
+.lb-rank.r2{background:linear-gradient(135deg,#c0c0c0,#888);color:#000}
+.lb-rank.r3{background:linear-gradient(135deg,#cd7f32,#8b4513);color:#fff}
+.lb-rank.rn{background:var(--sf2);color:var(--txd)}
+.lb-name{flex:1;font-weight:700}
+.lb-score{font-family:'JetBrains Mono',monospace;font-size:.88rem;color:var(--ac3);font-weight:700}
+.lb-pct{font-size:.78rem;color:var(--txd);margin-left:4px}
+.lb-empty{padding:24px;text-align:center;color:var(--txd);font-size:.9rem}
+
+/* NAV USER */
+.nav-user{display:flex;align-items:center;gap:6px;padding:6px 14px;background:rgba(0,229,255,.07);border:1px solid rgba(0,229,255,.15);border-radius:100px;font-size:.8rem;font-weight:700;color:var(--ac);white-space:nowrap;flex-shrink:0}
+
+/* ===== MOBILE ===== */
+@media(max-width:768px){
+  .dbd{grid-template-columns:1fr}
+  .three{grid-template-columns:1fr 1fr}
+  .nav .theme-toggle{display:none}
+  .hero-theme{display:flex}
+  .sec{padding:2rem .9rem}
+  .card{padding:1.2rem}
+  .fake-login{max-width:100%;width:100%}
+  .xp-hud{right:0;left:0;top:auto;bottom:0;border-radius:0;border-left:none;border-right:none;border-bottom:none;border-top:1px solid var(--border);padding:8px 16px;justify-content:center;gap:12px;z-index:120}
+  .xp-hud .xp-bar-wrap{width:100px}
+  .nav{padding:0 .5rem;scrollbar-width:none}
+  .nav::-webkit-scrollbar{display:none}
+  .nav-user{display:none}
+  .tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:4px}
+  .tabs::-webkit-scrollbar{display:none}
+  .tb{white-space:nowrap;padding:8px 14px;font-size:.78rem}
+  .admin-tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .admin-tabs::-webkit-scrollbar{display:none}
+  .admin-tb{white-space:nowrap;font-size:.78rem;padding:8px 12px}
+  .hero{min-height:90vh;padding:1.5rem 1rem 4rem}
+  .hero h1{font-size:2rem}
+  .hero .sub{font-size:.9rem}
+  .badge{font-size:.78rem;padding:6px 14px}
+  .ch-choices{flex-direction:column}
+  .ch-choice{width:100%;text-align:center}
+  .challenge{margin-bottom:1rem}
+  .email-client{font-size:.8rem}
+  .email-toolbar .et-addr{font-size:.68rem}
+  .email-header .eh-row{flex-wrap:wrap;gap:4px}
+  .email-header .eh-subj{font-size:.9rem}
+  .email-body{padding:14px;font-size:.85rem;line-height:1.7}
+  .ct{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .ct th,.ct td{padding:8px 10px;font-size:.78rem;white-space:nowrap}
+  .results-table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .dcode{font-size:.75rem;line-height:1.9}
+  .dpanel{padding:10px 12px}
+  .codeblock pre{font-size:.75rem;padding:12px 14px}
+  .sec-t{font-size:1.6rem}
+  .sec-d{font-size:.9rem}
+  .login-box{padding:28px 20px;border-radius:16px}
+  .login-title{font-size:1.5rem}
+  .login-sub{font-size:.82rem;margin-bottom:1.5rem}
+  .login-box input{padding:12px 14px;font-size:.95rem}
+  .acc-hdr{padding:14px 16px;font-size:.9rem}
+  .acc-content{font-size:.85rem}
+  .lb-row{padding:10px 14px;gap:8px;font-size:.85rem}
+  .lb-score{font-size:.78rem}
+  .sms-wrap{padding:14px}
+  .qcard{padding:1.2rem}
+  .qo{padding:10px 12px;font-size:.85rem}
+  .admin-section{padding:16px}
+  .admin-form input,.admin-form textarea,.admin-form select{font-size:.88rem}
+  .score-stat{font-size:.8rem;padding:6px 10px}
+  .ib{padding:12px 14px;font-size:.85rem}
+  .mc{padding:1.1rem}
+  .mc .ic{font-size:1.8rem}
+  .mc h4{font-size:.9rem}
+  .mc p{font-size:.78rem}
+  body{padding-bottom:52px}
+}
+@media(max-width:480px){
+  .nav a{padding:12px 8px;font-size:.72rem}
+  .three{grid-template-columns:1fr}
+  .hero h1{font-size:1.7rem}
+  .sec-t{font-size:1.4rem}
+  .email-header .eh-val{font-size:.78rem;word-break:break-all}
+  .tabs .tb{padding:8px 10px;font-size:.72rem}
+  .ch-choice{font-size:.82rem;padding:10px 14px}
+  .login-box{padding:22px 16px}
+  .login-title{font-size:1.3rem}
+  .fake-login{width:100%}
+  .fl-url{font-size:.65rem;word-break:break-all}
+  .codeblock pre{font-size:.7rem;line-height:1.7}
+  .dlinenum{width:20px;margin-right:8px;font-size:.72rem}
+  .dlinetext{font-size:.72rem}
+  .find-game{padding:14px}
+}
+
+/* BURGER NAV */
+.nav{padding:0 .75rem;display:flex;align-items:center;gap:0;min-height:48px}
+.nav-links{display:flex;align-items:center;gap:0;flex:1;overflow-x:auto;scrollbar-width:none}
+.nav-links::-webkit-scrollbar{display:none}
+.nav-right{display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:auto}
+.burger{display:none;background:none;border:1px solid var(--border);color:var(--tx);font-size:1.1rem;width:36px;height:36px;border-radius:10px;cursor:pointer;flex-shrink:0;margin-right:6px;align-items:center;justify-content:center}
+@media(max-width:640px){
+  .burger{display:flex}
+  .nav-links{
+    display:none;
+    position:fixed;
+    top:48px;left:0;right:0;
+    background:var(--nav-bg);
+    backdrop-filter:blur(16px);
+    border-bottom:1px solid var(--border);
+    flex-direction:column;
+    align-items:stretch;
+    gap:0;
+    z-index:99;
+    overflow-x:visible;
+    padding:.5rem 0;
+  }
+  .nav-links.open{display:flex}
+  .nav-links a{padding:13px 20px;font-size:.95rem;border-bottom:1px solid var(--border)}
+  .nav-links a:last-child{border-bottom:none}
+  .nav-right .nav-user{display:none}
+  .theme-toggle{display:flex !important}
+}
+</style>
+</head>
+<body>
+<!-- LOGIN OVERLAY -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <div class="lb-grid"></div>
+    <div style="font-size:2.5rem;margin-bottom:.5rem">🛡️</div>
+    <div class="login-title">Phishing Simulator</div>
+    <div class="login-sub">Интерактивный тренажёр по кибербезопасности</div>
+    <div class="login-badge">🔐 Требуется идентификация</div>
+    <input type="text" id="loginName" placeholder="Введите ваше имя..." maxlength="40" autocomplete="off">
+    <button class="lb-btn" onclick="doLogin()">Начать обучение →</button>
+    <span class="lb-admin-link" onclick="toggleAdminLogin()">Войти как администратор</span>
+    <div class="admin-login-form" id="adminLoginForm">
+      <input type="text" id="adminLoginUser" placeholder="Логин администратора">
+      <input type="password" id="adminLoginPass" placeholder="Пароль">
+      <button class="alb" onclick="doAdminLogin()">Войти в панель</button>
+      <div class="admin-login-err" id="adminLoginErr">Неверный логин или пароль</div>
+    </div>
+  </div>
+</div>
+
+<div class="progress-bar" id="progressBar"></div>
+<div class="xp-hud" id="xpHud">
+  <span class="xp-icon">⚡</span>
+  <span class="xp-val" id="xpVal">0 XP</span>
+  <div class="xp-bar-wrap"><div class="xp-bar-fill" id="xpBarFill" style="width:0%"></div></div>
+  <span id="levelBadge" style="color:var(--ac);font-size:.75rem">Новобранец</span>
+</div>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-scan"><div class="scan-line"></div></div>
+  <div class="badge">🛡️ CyberSec Training v2.0</div>
+  <h1>Phishing Simulator</h1>
+  <p class="sub">Интерактивный тренажёр по распознаванию фишинга — теория, практика, реалистичные атаки. Научись защищать себя и других.</p>
+  <div class="hero-row">
+    <button class="theme-toggle hero-theme" id="heroThemeBtn" title="Сменить тему">🌙</button>
+  </div>
+  <div class="scroll-h">↓ Начать обучение</div>
+</section>
+
+<!-- NAV -->
+<nav class="nav" id="mainNav">
+  <button class="burger" id="burgerBtn" onclick="toggleBurger()" aria-label="Меню">☰</button>
+  <div class="nav-links" id="navLinks">
+    <a href="#theory" onclick="closeBurger()">Теория</a>
+    <a href="#types" onclick="closeBurger()">Типы атак</a>
+    <a href="#signs" onclick="closeBurger()">Признаки</a>
+    <a href="#trainer" onclick="closeBurger()">Тренажёр</a>
+    <a href="#analyzer" onclick="closeBurger()">Анализатор</a>
+    <a href="#quiz" onclick="closeBurger()">Тест</a>
+    <a href="#leaderboard" onclick="closeBurger()">🏆 Рейтинг</a>
+    <a href="#admin" onclick="closeBurger()" id="adminNavLink" style="display:none">Админ</a>
+  </div>
+  <div class="nav-right">
+    <div class="nav-user" id="navUser" style="display:none">👤 <span id="navUserName"></span></div>
+    <button class="theme-toggle" id="themeBtn" title="Сменить тему">🌙</button>
+  </div>
+</nav>
+
+<!-- ===== THEORY ===== -->
+<section class="sec fin" id="theory">
+<h2 class="sec-t">Что такое <span class="hl">фишинг?</span></h2>
+<p class="sec-d">Фишинг — это форма киберпреступности, при которой злоумышленники обманом заставляют жертв раскрыть конфиденциальную информацию или перейти на вредоносный ресурс.</p>
+
+<div class="three">
+  <div class="mc"><div class="ic">🎣</div><h4>Социальная инженерия</h4><p>Манипуляция доверием человека — главное оружие фишинга</p></div>
+  <div class="mc"><div class="ic">🚨</div><h4>Срочность и страх</h4><p>«Ваш аккаунт заблокирован!» — классическая тактика давления</p></div>
+  <div class="mc"><div class="ic">🎭</div><h4>Имитация</h4><p>Мошенники копируют дизайн банков, Google, Apple и других компаний</p></div>
+  <div class="mc"><div class="ic">💸</div><h4>Кража данных</h4><p>Пароли, номера карт, личные данные — цель злоумышленника</p></div>
+  <div class="mc"><div class="ic">🌐</div><h4>Масштаб угрозы</h4><p>3,4 миллиарда фишинговых писем рассылается каждый день</p></div>
+  <div class="mc"><div class="ic">🛡️</div><h4>Защита — знание</h4><p>Умение распознать атаку — лучшая защита от мошенников</p></div>
+</div>
+
+<div class="ib wrn"><span class="ic">⚠️</span><div><strong>Статистика:</strong> 91% всех кибератак начинается с фишингового письма. Каждые 11 секунд в мире происходит новая фишинговая атака.</div></div>
+
+<div class="card">
+  <span class="cl syn">Теория</span>
+  <h3>🧠 Психология фишинга</h3>
+  <p style="color:var(--txd);margin-bottom:1rem">Злоумышленники эксплуатируют базовые психологические механизмы:</p>
+  <table class="ct">
+    <thead><tr><th>Триггер</th><th>Как используется</th><th>Пример</th></tr></thead>
+    <tbody>
+      <tr><td>😱 <strong>Страх</strong></td><td>Угроза потери аккаунта/денег</td><td>«Ваша карта заблокирована»</td></tr>
+      <tr><td>⚡ <strong>Срочность</strong></td><td>Давление временем</td><td>«Подтвердите в течение 24 часов»</td></tr>
+      <tr><td>🤑 <strong>Жадность</strong></td><td>Обещание приза или выигрыша</td><td>«Вы выиграли iPhone 16!»</td></tr>
+      <tr><td>🔑 <strong>Авторитет</strong></td><td>Имитация официальных структур</td><td>«ФНС России: задолженность»</td></tr>
+      <tr><td>🤝 <strong>Доверие</strong></td><td>Письмо «от друга»</td><td>«Привет, посмотри эту ссылку»</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="ib inf"><span class="ic">💡</span><div>Главное правило: <strong>легитимные организации никогда не просят пароли, CVV-коды и ПИН-коды по электронной почте, SMS или телефону.</strong></div></div>
+</section>
+
+<!-- ===== TYPES ===== -->
+<section class="sec fin" id="types">
+<h2 class="sec-t">Типы <span class="hl">фишинговых атак</span></h2>
+<p class="sec-d">Злоумышленники используют множество каналов. Каждый тип имеет свои признаки — изучи их все.</p>
+
+<div class="tabs" id="typesTabs">
+  <button class="tb active" data-tab="t-email">📧 Email</button>
+  <button class="tb" data-tab="t-sms">📱 SMS / Smishing</button>
+  <button class="tb" data-tab="t-login">🔐 Fake Login</button>
+  <button class="tb" data-tab="t-social">👥 Соц. инженерия</button>
+  <button class="tb" data-tab="t-links">🔗 Ссылки</button>
+</div>
+
+<div class="tp active" id="t-email">
+  <div class="card"><span class="cl ex">Email Phishing</span><h3>📧 Фишинговые письма</h3>
+  <p style="color:var(--txd);margin-bottom:1.2rem">Самый распространённый тип. Письмо имитирует сообщение от известного банка, сервиса или госоргана.</p>
+  <div class="ib err"><span class="ic">🚩</span><div>Красные флаги: подозрительный домен отправителя, безличное обращение «Уважаемый клиент», ошибки в тексте, подозрительные ссылки, вложения.</div></div>
+  <div class="email-client">
+    <div class="email-toolbar"><div class="et-dot"></div><div class="et-dot"></div><div class="et-dot"></div><div class="et-addr">https://mail.example.ru/inbox</div></div>
+    <div class="email-header">
+      <div class="eh-row"><span class="eh-lbl">От:</span><span class="eh-val suspicious" title="⚠️ Настоящий домен Сбербанка: sberbank.ru">no-reply@sberbank-secure-alert.ru</span></div>
+      <div class="eh-row"><span class="eh-lbl">Кому:</span><span class="eh-val">user@example.com</span></div>
+      <div class="eh-row"><span class="eh-lbl">Дата:</span><span class="eh-val">Сегодня, 09:43</span></div>
+      <div class="eh-subj">⚠️ СРОЧНО: Ваш счёт заблокирован — требуется подтверждение</div>
+    </div>
+    <div class="email-body">
+      <p>Уважаемый клиент!</p><br>
+      <p>Мы обнаружили <span class="phish-marker" title="🚩 Типичная тактика запугивания — создание паники">подозрительную активность</span> на вашем счёте. В целях безопасности ваш аккаунт был <strong>временно заблокирован</strong>.</p><br>
+      <p>Для восстановления доступа <span class="phish-marker" title="🚩 Настоящие банки не просят делать это по ссылке в письме">необходимо срочно подтвердить ваши данные</span> в течение <span class="phish-marker" title="🚩 Искусственная срочность — давление на жертву">24 часов</span>, иначе счёт будет закрыт.</p><br>
+      <p>👉 <span class="suspicious-link" data-url="http://sberbank-account-verify.ru/login">Нажмите здесь для подтверждения</span></p><br>
+      <p style="color:var(--txd);font-size:.82rem">С уважением,<br>Служба безопасности Сбербанк<br><em>Наведите на красные элементы, чтобы увидеть признаки фишинга</em></p>
+    </div>
+  </div>
+  </div>
+</div>
+
+<div class="tp" id="t-sms">
+  <div class="card"><span class="cl ex">SMS Phishing (Smishing)</span><h3>📱 Фишинговые SMS</h3>
+  <p style="color:var(--txd);margin-bottom:1.2rem">Smishing — фишинг через SMS. Короткое сообщение с ссылкой, которая ведёт на фальшивый сайт или скачивает вредоносное ПО.</p>
+  <div class="sms-wrap">
+    <div class="sms-bubble phish">
+      <div class="sms-sender">Sberbank</div>
+      Ваша карта *7891 заблокирована. Срочно подтвердите данные: <span style="color:var(--ac2);text-decoration:underline">http://sbrf-verify.site/card</span>
+      <div class="sms-time">09:17</div>
+    </div>
+    <div class="sms-bubble phish">
+      <div class="sms-sender">Gosuslugi</div>
+      Вам начислена компенсация 8 450 руб. Для получения перейдите: <span style="color:var(--ac2);text-decoration:underline">gosuslugi-vyplaty.ru/get</span>
+      <div class="sms-time">11:32</div>
+    </div>
+  </div>
+  <div class="ib wrn"><span class="ic">⚠️</span><div>Никогда не переходите по ссылкам из SMS от незнакомых отправителей. Настоящие банки не присылают ссылки в SMS — только коды подтверждения.</div></div>
+  </div>
+</div>
+
+<div class="tp" id="t-login">
+  <div class="card"><span class="cl ex">Fake Login Pages</span><h3>🔐 Поддельные страницы входа</h3>
+  <p style="color:var(--txd);margin-bottom:1.2rem">Мошенники создают точные копии сайтов банков и сервисов. Разница — только в адресной строке.</p>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+  <div class="fake-login">
+    <div class="fl-bar">
+      <span class="fl-lock">⚠️</span>
+      <div class="fl-url">http://sberbank-online.secure-login.ru</div>
+    </div>
+    <div class="fl-body">
+      <div class="fl-logo">🏦</div>
+      <div class="fl-title">СберБанк Онлайн</div>
+      <input type="text" placeholder="Логин или номер телефона">
+      <input type="password" placeholder="Пароль">
+      <button class="fl-btn">Войти</button>
+      <div class="fl-fine">Входя в систему, вы соглашаетесь с условиями</div>
+    </div>
+  </div>
+  <div style="flex:1;min-width:200px">
+    <div class="ib err"><span class="ic">🚩</span><div><strong>Признаки подделки:</strong><br>
+    • HTTP вместо HTTPS<br>
+    • Домен не совпадает с официальным<br>
+    • Лишние слова в URL: "secure", "online", "verify"<br>
+    • Нет зелёного замка в браузере
+    </div></div>
+    <div class="ib inf"><span class="ic">✅</span><div><strong>Настоящий сайт:</strong><br>
+    https://<strong>sberbank.ru</strong><br>
+    Всегда HTTPS + правильный домен
+    </div></div>
+  </div>
+  </div>
+  </div>
+</div>
+
+<div class="tp" id="t-social">
+  <div class="card"><span class="cl ex">Социальная инженерия</span><h3>👥 Вишинг и обман через доверие</h3>
+  <p style="color:var(--txd);margin-bottom:1.2rem">Вишинг — голосовой фишинг. Звонок «от банка», «из полиции» или «от Microsoft». Цель — получить данные устно.</p>
+  <div class="codeblock"><div class="hdr"><div class="dots"><span></span><span></span><span></span></div><span class="fname">vishing_scenario.txt</span></div>
+  <pre>
+МОШЕННИК: Здравствуйте! Служба безопасности Сбербанка.
+          С вашего счёта пытаются вывести 85 000 рублей.
+          Для отмены операции назовите код из SMS.
+
+ЖЕРТВА:   ...
+
+МОШЕННИК: Торопитесь! У вас есть 2 минуты!
+
+# Красные флаги:
+# - Звонок неожиданный, без причины
+# - Создаётся искусственная паника
+# - Просят назвать SMS-код (банки НИКОГДА так не делают!)
+# - Давление и ограничение по времени
+  </pre></div>
+  <div class="ib err"><span class="ic">🔴</span><div><strong>Абсолютное правило:</strong> Банки, полиция и госорганы НИКОГДА не просят назвать SMS-коды, CVV, ПИН-код или перевести деньги «на безопасный счёт».</div></div>
+  </div>
+</div>
+
+<div class="tp" id="t-links">
+  <div class="card"><span class="cl tip">Анализ ссылок</span><h3>🔗 Как проверять ссылки</h3>
+  <p style="color:var(--txd);margin-bottom:1.2rem">URL — первая линия защиты. Научись читать ссылки как эксперт по кибербезопасности.</p>
+  <table class="ct">
+    <thead><tr><th>URL</th><th>Статус</th><th>Причина</th></tr></thead>
+    <tbody>
+      <tr><td><code>https://sberbank.ru/login</code></td><td style="color:var(--ok)">✅ Безопасный</td><td>Официальный домен, HTTPS</td></tr>
+      <tr><td><code>http://sberbank.ru.verify-now.com</code></td><td style="color:var(--err)">🚩 Фишинг</td><td>sberbank.ru — не главный домен!</td></tr>
+      <tr><td><code>https://sbrf-secure.login.ru</code></td><td style="color:var(--err)">🚩 Фишинг</td><td>Не официальный домен банка</td></tr>
+      <tr><td><code>https://gosuslugi.ru/pay</code></td><td style="color:var(--ok)">✅ Безопасный</td><td>Официальный домен Госуслуг</td></tr>
+      <tr><td><code>https://bit.ly/3xY2k9m</code></td><td style="color:var(--ac3)">⚠️ Осторожно</td><td>Сокращённая ссылка — неизвестно куда ведёт</td></tr>
+      <tr><td><code>http://paypal.com.account-verify.site</code></td><td style="color:var(--err)">🚩 Фишинг</td><td>Настоящий домен — после последней точки перед /</td></tr>
+    </tbody>
+  </table>
+  <div class="ib inf"><span class="ic">🧠</span><div><strong>Формула:</strong> Главный домен — это слово между <em>последней точкой</em> и первым <code>/</code>. Например в <code>login.sberbank.ru.evil.com/page</code> главный домен — <code>evil.com</code>, а не sberbank!</div></div>
+  </div>
+</div>
+</section>
+
+<!-- ===== SIGNS ===== -->
+<section class="sec fin" id="signs">
+<h2 class="sec-t">Признаки <span class="hl">мошенничества</span></h2>
+<p class="sec-d">Изучи все красные флаги — они помогут распознать атаку за секунды.</p>
+
+<div id="accordionSigns">
+  <div class="acc-item open">
+    <div class="acc-hdr" onclick="toggleAcc(this)">
+      <span><span class="acc-icon">📧</span>Подозрительный адрес отправителя</span>
+      <span class="acc-arr">▼</span>
+    </div>
+    <div class="acc-body"><div class="acc-content">
+      <p>Внимательно смотри на домен письма. Мошенники используют домены, похожие на настоящие:</p>
+      <ul style="margin:10px 0 10px 20px;line-height:2">
+        <li><code>support@sberbank-security.ru</code> — <span style="color:var(--err)">фишинг</span></li>
+        <li><code>noreply@sberbank.ru</code> — <span style="color:var(--ok)">настоящий</span></li>
+        <li><code>apple@apple-id.verify.com</code> — <span style="color:var(--err)">фишинг</span></li>
+        <li><code>no_reply@id.apple.com</code> — <span style="color:var(--ok)">настоящий</span></li>
+      </ul>
+      <div class="ib inf"><span class="ic">💡</span><div>Всегда кликай на имя отправителя, чтобы увидеть настоящий email адрес.</div></div>
+    </div></div>
+  </div>
+  <div class="acc-item">
+    <div class="acc-hdr" onclick="toggleAcc(this)">
+      <span><span class="acc-icon">⚡</span>Искусственная срочность и давление</span>
+      <span class="acc-arr">▼</span>
+    </div>
+    <div class="acc-body"><div class="acc-content">
+      <p>Фишеры создают панику, чтобы вы действовали быстро, не думая:</p>
+      <div class="ib err"><span class="ic">🚩</span><div>«Ваш аккаунт будет удалён через 24 часа», «Срочно подтвердите», «Немедленно войдите», «Последнее предупреждение» — всё это попытки лишить вас времени на размышление.</div></div>
+      <p>Настоящие организации дают разумное время на ответ и уведомляют несколькими способами.</p>
+    </div></div>
+  </div>
+  <div class="acc-item">
+    <div class="acc-hdr" onclick="toggleAcc(this)">
+      <span><span class="acc-icon">🔗</span>Подозрительные ссылки и кнопки</span>
+      <span class="acc-arr">▼</span>
+    </div>
+    <div class="acc-body"><div class="acc-content">
+      <p>Перед кликом наведи курсор на ссылку и посмотри в строке браузера, куда она ведёт на самом деле.</p>
+      <div class="codeblock" style="margin:10px 0"><pre>
+ВИДНО В ПИСЬМЕ: Войти в Сбербанк Онлайн
+РЕАЛЬНАЯ ССЫЛКА: http://sberbank-login.malware-site.xyz/steal.php
+      </pre></div>
+      <p>Если видимый текст не совпадает с реальным URL — это фишинг.</p>
+    </div></div>
+  </div>
+  <div class="acc-item">
+    <div class="acc-hdr" onclick="toggleAcc(this)">
+      <span><span class="acc-icon">✍️</span>Ошибки и странный язык</span>
+      <span class="acc-arr">▼</span>
+    </div>
+    <div class="acc-body"><div class="acc-content">
+      <p>Профессиональные компании тщательно вычитывают свои письма. Признаки подозрительного письма:</p>
+      <ul style="margin:10px 0 10px 20px;line-height:2">
+        <li>Орфографические и грамматические ошибки</li>
+        <li>Машинный перевод («Дорогой пользователь нашего сервиса»)</li>
+        <li>Безличное обращение вместо вашего имени</li>
+        <li>Странное форматирование, смешанные шрифты</li>
+      </ul>
+    </div></div>
+  </div>
+  <div class="acc-item">
+    <div class="acc-hdr" onclick="toggleAcc(this)">
+      <span><span class="acc-icon">🗂️</span>Запрос конфиденциальных данных</span>
+      <span class="acc-arr">▼</span>
+    </div>
+    <div class="acc-body"><div class="acc-content">
+      <div class="ib err"><span class="ic">🔴</span><div><strong>Железное правило:</strong> Ни один легитимный банк, сервис или госорган никогда не запросит по email или SMS:<br>
+      • Пароль или PIN-код<br>
+      • CVV/CVC код с обратной стороны карты<br>
+      • Код из SMS (одноразовый пароль)<br>
+      • Полный номер карты
+      </div></div>
+      <p>Если в письме или SMS просят эти данные — это 100% мошенничество.</p>
+    </div></div>
+  </div>
+</div>
+</section>
+
+<!-- ===== TRAINER ===== -->
+<section class="sec fin" id="trainer">
+<h2 class="sec-t">Интерактивный <span class="hl">тренажёр</span></h2>
+<p class="sec-d">Анализируй реалистичные письма, находи признаки фишинга и принимай решения. Каждый правильный ответ приносит XP!</p>
+
+<div style="display:flex;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap;align-items:center">
+  <span class="score-stat">🎯 Правильно: <span id="trainerCorrect" style="color:var(--ok)">0</span></span>
+  <span class="score-stat">❌ Ошибки: <span id="trainerWrong" style="color:var(--err)">0</span></span>
+  <span class="score-stat">⚡ XP: <span id="trainerXP" style="color:var(--ac3)">0</span></span>
+</div>
+
+<!-- Challenge 1 -->
+<div class="challenge" id="ch1">
+  <div class="ch-header">
+    <span class="ch-title">📧 Задание 1 — Email анализ</span>
+    <span class="diff-badge easy">Лёгкое</span>
+  </div>
+  <div class="ch-body">
+    <div class="email-client">
+      <div class="email-toolbar"><div class="et-dot"></div><div class="et-dot"></div><div class="et-dot"></div><div class="et-addr">mail.ru/inbox</div></div>
+      <div class="email-header">
+        <div class="eh-row"><span class="eh-lbl">От:</span><span class="eh-val">noreply@alfabank.ru</span></div>
+        <div class="eh-row"><span class="eh-lbl">Кому:</span><span class="eh-val">you@mail.ru</span></div>
+        <div class="eh-subj">Ваша выписка за октябрь готова</div>
+      </div>
+      <div class="email-body">
+        <p>Иван Иванович, добрый день!</p><br>
+        <p>Ваша ежемесячная выписка по карте *1234 за октябрь 2024 года готова.</p><br>
+        <p>Посмотреть выписку можно в <a href="#" onclick="return false" style="color:var(--ac)">мобильном приложении Альфа-Банка</a> или в личном кабинете на alfabank.ru.</p><br>
+        <p>С уважением,<br>Альфа-Банк</p>
+      </div>
+    </div>
+    <div class="ch-question">Это письмо фишинговое или нет?</div>
+    <div class="ch-choices">
+      <button class="ch-choice phish-btn" onclick="answerChallenge('ch1',false,this,'✅ Верно! Это обычное сервисное письмо. Признаки безопасности: официальный домен alfabank.ru, персональное обращение по имени, ссылка ведёт на официальный сайт, не требует вводить данные.', 15)">🚩 Фишинг</button>
+      <button class="ch-choice safe-btn" onclick="answerChallenge('ch1',true,this,'✅ Верно! Это обычное сервисное письмо. Признаки безопасности: официальный домен alfabank.ru, персональное обращение по имени, ссылка ведёт на официальный сайт, не требует вводить данные.', 15)">✅ Безопасное</button>
+    </div>
+    <div class="ch-feedback" id="ch1-fb"></div>
+  </div>
+</div>
+
+<!-- Challenge 2 -->
+<div class="challenge" id="ch2">
+  <div class="ch-header">
+    <span class="ch-title">📧 Задание 2 — Подозрительное письмо</span>
+    <span class="diff-badge med">Среднее</span>
+  </div>
+  <div class="ch-body">
+    <div class="email-client">
+      <div class="email-toolbar"><div class="et-dot"></div><div class="et-dot"></div><div class="et-dot"></div><div class="et-addr">gmail.com/inbox</div></div>
+      <div class="email-header">
+        <div class="eh-row"><span class="eh-lbl">От:</span><span class="eh-val">security-alert@google-account-verify.com</span></div>
+        <div class="eh-row"><span class="eh-lbl">Кому:</span><span class="eh-val">you@gmail.com</span></div>
+        <div class="eh-subj">⚠️ Необычный вход в аккаунт Google — немедленно проверьте</div>
+      </div>
+      <div class="email-body">
+        <p>Уважаемый пользователь!</p><br>
+        <p>Мы заметили вход в ваш Google аккаунт с нового устройства (Москва, Россия). Если это не вы — немедленно <span class="suspicious-link" data-url="http://google-account-verify.com/secure">нажмите здесь для защиты аккаунта</span>.</p><br>
+        <p>У вас есть только <strong>30 минут</strong> до автоматической блокировки.</p>
+      </div>
+    </div>
+    <div class="ch-question">Определи: это письмо от Google или фишинг?</div>
+    <div class="ch-choices">
+      <button class="ch-choice phish-btn" onclick="answerChallenge('ch2',true,this,'✅ Верно! Это фишинг. Признаки: домен google-account-verify.com — НЕ официальный домен Google (должен быть google.com), безличное «Уважаемый пользователь», искусственная срочность 30 минут, ссылка ведёт на подозрительный домен.', 25)">🚩 Фишинг</button>
+      <button class="ch-choice safe-btn" onclick="answerChallenge('ch2',false,this,'❌ Неверно! Это фишинг. Признаки: домен google-account-verify.com — НЕ официальный домен Google (должен быть google.com), безличное «Уважаемый пользователь», искусственная срочность 30 минут.', 25)">✅ Безопасное</button>
+    </div>
+    <div class="ch-feedback" id="ch2-fb"></div>
+  </div>
+</div>
+
+<!-- Challenge 3: Find the phishing signs -->
+<div class="challenge" id="ch3">
+  <div class="ch-header">
+    <span class="ch-title">🔍 Задание 3 — Найди все признаки фишинга</span>
+    <span class="diff-badge hard">Сложное</span>
+  </div>
+  <div class="ch-body">
+    <div class="find-game">
+      <div class="fg-q">Нажми на все подозрительные элементы в письме ниже (найди 4 признака):</div>
+      <div style="background:var(--sf);border:1px solid var(--border);border-radius:12px;padding:16px;line-height:2;font-size:.9rem">
+        <p>От: <span class="marker-target" data-is-phish="true" data-tip="🚩 Настоящий Тинькофф использует домен @tinkoff.ru" id="fg-s1" onclick="markTarget(this)">noreply@tinkoff-bank-secure.online</span></p>
+        <p>Тема: <span class="marker-target" data-is-phish="true" data-tip="🚩 Запрос CVC — 100% мошенничество. Банки никогда не просят CVC!" id="fg-s2" onclick="markTarget(this)">Подтвердите CVC-код вашей карты</span></p>
+        <br>
+        <p>Уважаемый клиент! Для подтверждения платежа на <span class="marker-target" data-is-phish="false" data-tip="✅ Конкретная сумма — не обязательный признак фишинга" id="fg-s3" onclick="markTarget(this)">5 000 руб</span>, введите CVC вашей карты в форме ниже.</p>
+        <br>
+        <p>Ваш аккаунт будет <span class="marker-target" data-is-phish="true" data-tip="🚩 Искусственная срочность — классическая тактика фишинга" id="fg-s4" onclick="markTarget(this)">заблокирован через 1 час</span>, если вы не подтвердите данные.</p>
+        <br>
+        <p>Подтвердить: <span class="marker-target" data-is-phish="true" data-tip="🚩 Ссылка ведёт не на tinkoff.ru, а на мошеннический домен!" id="fg-s5" onclick="markTarget(this)">http://tinkoff.verify-payment.xyz</span></p>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <div class="fg-score">🎯 Найдено: <span id="fg-found">0</span>/4</div>
+        <button class="rb" style="font-size:.8rem;padding:8px 16px" onclick="checkFindGame()">Проверить ответ</button>
+      </div>
+      <div class="ch-feedback" id="ch3-fb" style="margin-top:10px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Challenge 4: SMS -->
+<div class="challenge" id="ch4">
+  <div class="ch-header">
+    <span class="ch-title">📱 Задание 4 — SMS анализ</span>
+    <span class="diff-badge med">Среднее</span>
+  </div>
+  <div class="ch-body">
+    <div class="sms-wrap">
+      <div class="sms-bubble">
+        <div class="sms-sender">Gosuslugi</div>
+        Ваш код подтверждения: <strong>847291</strong>. Никому не сообщайте код.
+        <div class="sms-time">14:22</div>
+      </div>
+    </div>
+    <div class="ch-question">Пришёл SMS с кодом, хотя вы ничего не делали на Госуслугах. Что это значит?</div>
+    <div class="ch-choices">
+      <button class="ch-choice" onclick="answerChallenge('ch4','A',this,'✅ Верно! Это попытка взлома — кто-то вводит ваш номер/логин на чужом устройстве. Нужно срочно сменить пароль на Госуслугах и включить двухфакторную аутентификацию.', 20)">⚠️ Попытка взлома — нужно сменить пароль</button>
+      <button class="ch-choice" onclick="answerChallenge('ch4','B',this,'❌ Неверно! Ошибочная рассылка не отправляет реальные персональные коды. SMS-код означает, что кто-то пытается войти в ваш аккаунт.', 20)">😴 Ошибочная рассылка, игнорировать</button>
+      <button class="ch-choice" onclick="answerChallenge('ch4','C',this,'❌ Опасно! Если вам звонят и просят этот код — это мошенники. Никогда не называйте коды из SMS. Надо сменить пароль.', 20)">📞 Перезвонить в поддержку и назвать код</button>
+    </div>
+    <div class="ch-feedback" id="ch4-fb"></div>
+  </div>
+</div>
+
+<!-- Challenge 5: URL check -->
+<div class="challenge" id="ch5">
+  <div class="ch-header">
+    <span class="ch-title">🔗 Задание 5 — Анализ URL</span>
+    <span class="diff-badge hard">Сложное</span>
+  </div>
+  <div class="ch-body">
+    <div class="codeblock"><pre>
+https://accounts.google.com.secure-verify.ru/signin
+    </pre></div>
+    <div class="ch-question">Куда ведёт эта ссылка на самом деле?</div>
+    <div class="ch-choices">
+      <button class="ch-choice" onclick="answerChallenge('ch5','A',this,'❌ Неверно! google.com — это поддомен в этой ссылке. Настоящий домен — последнее слово перед первым /.', 30)">На сайт Google (google.com)</button>
+      <button class="ch-choice" onclick="answerChallenge('ch5','B',this,'✅ Верно! Настоящий домен — secure-verify.ru. Слова accounts.google.com — это лишь поддомен мошеннического сайта. Это классическая техника маскировки URL.', 30)">На мошеннический сайт (secure-verify.ru)</button>
+      <button class="ch-choice" onclick="answerChallenge('ch5','C',this,'❌ Неверно! .ru означает российский домен, но не определяет легитимность. Настоящий домен — secure-verify.ru, а не google.com.', 30)">Это безопасно, так как есть .ru</button>
+    </div>
+    <div class="ch-feedback" id="ch5-fb"></div>
+  </div>
+</div>
+</section>
+
+<!-- ===== ANALYZER (Debugger) ===== -->
+<section class="sec fin" id="analyzer">
+<h2 class="sec-t">Пошаговый <span class="hl">анализатор</span></h2>
+<p class="sec-d">Разберём фишинговое письмо шаг за шагом — как это делает специалист по кибербезопасности.</p>
+
+<div class="tabs" id="analyzerTabs">
+  <button class="tb active" data-tab="an1">Email-атака</button>
+  <button class="tb" data-tab="an2">Анализ URL</button>
+</div>
+
+<div class="tp active" id="an1">
+<div class="dw">
+  <div class="dtb">
+    <span class="tt">🔬 Анализатор письма</span>
+    <button class="dbtn" onclick="ds(1)">▶ Шаг</button>
+    <button class="dbtn" onclick="da(1)">⏩ Авто</button>
+    <button class="dbtn rs" onclick="dr(1)">↺ Сброс</button>
+  </div>
+  <div class="dbd">
+    <div class="dcode" id="dc1"></div>
+    <div class="dpanel">
+      <div class="dst">🔍 Обнаружено</div>
+      <div id="dv1"><span style="color:var(--txd);font-size:.8rem">—</span></div>
+      <div class="dst">📋 Вердикт</div>
+      <div class="dcon" id="do1"></div>
+      <div class="dst">💬 Пояснение</div>
+      <div id="dm1" style="color:var(--ac3);font-size:.85rem;font-style:italic;margin-top:4px">Нажмите «Шаг» для начала анализа</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="tp" id="an2">
+<div class="dw">
+  <div class="dtb">
+    <span class="tt">🔬 Анализатор URL</span>
+    <button class="dbtn" onclick="ds(2)">▶ Шаг</button>
+    <button class="dbtn" onclick="da(2)">⏩ Авто</button>
+    <button class="dbtn rs" onclick="dr(2)">↺ Сброс</button>
+  </div>
+  <div class="dbd">
+    <div class="dcode" id="dc2"></div>
+    <div class="dpanel">
+      <div class="dst">🔍 Обнаружено</div>
+      <div id="dv2"><span style="color:var(--txd);font-size:.8rem">—</span></div>
+      <div class="dst">📋 Вердикт</div>
+      <div class="dcon" id="do2"></div>
+      <div class="dst">💬 Пояснение</div>
+      <div id="dm2" style="color:var(--ac3);font-size:.85rem;font-style:italic;margin-top:4px">Нажмите «Шаг» для начала анализа</div>
+    </div>
+  </div>
+</div>
+</div>
+</section>
+
+<!-- ===== QUIZ ===== -->
+<section class="sec fin" id="quiz">
+<h2 class="sec-t">Проверь <span class="hl">знания!</span></h2>
+<p class="sec-d">15 вопросов на тему фишинга: теория, анализ писем, URL, психология атак. Заработай максимум XP!</p>
+<div id="qcont"></div>
+<div class="qresult" id="qresult">
+  <div class="big" id="qemoji"></div>
+  <h3 id="qscore"></h3>
+  <p class="sub" id="qmsg"></p>
+  <div class="btns">
+    <button class="retry" id="retryBtn" onclick="retryWrong()" style="display:none">📝 Работа над ошибками</button>
+    <button class="reset" onclick="resetQuiz()">↺ Пройти заново</button>
+  </div>
+</div>
+</section>
+
+<!-- ===== LEADERBOARD ===== -->
+<section class="sec fin" id="leaderboard">
+<h2 class="sec-t">🏆 <span class="hl">Лидерборд</span></h2>
+<p class="sec-d">Рейтинг обновляется в реальном времени — результаты появляются у всех участников сразу после прохождения теста.</p>
+
+<div class="lb-wrap" id="leaderboardWrap">
+  <div class="lb-header" style="justify-content:space-between">
+    <span>🏆 Топ участников</span>
+    <span id="lbStatus" style="font-size:.75rem;font-weight:600;color:var(--txd);display:flex;align-items:center;gap:5px">
+      <span id="lbDot" style="width:8px;height:8px;border-radius:50%;background:var(--txd);display:inline-block"></span>
+      <span id="lbStatusTxt">Подключение...</span>
+    </span>
+  </div>
+  <div id="leaderboardBody"><div class="lb-empty">Загрузка...</div></div>
+</div>
+</section>
+
+<!-- ===== ADMIN ===== -->
+<section class="sec fin" id="admin" style="display:none">
+<h2 class="sec-t">Админ <span class="hl">панель</span></h2>
+<p class="sec-d">Управление заданиями, просмотр результатов и лидерборд в реальном времени через Firebase.</p>
+
+<div class="admin-section" id="adminSection">
+  <div class="admin-tabs">
+    <button class="admin-tb active" data-atab="at1" id="addTaskTab">➕ Добавить задание</button>
+    <button class="admin-tb" data-atab="at2">📋 Задания</button>
+    <button class="admin-tb" data-atab="at3">📊 Результаты</button>
+    <button class="admin-tb" data-atab="at4">👥 Игроки</button>
+  </div>
+
+  <div class="admin-tp active" id="at1">
+    <div id="fbSetupBanner" style="background:rgba(255,217,61,.08);border:1px solid rgba(255,217,61,.25);border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:.85rem;line-height:1.7">
+  <strong style="color:var(--ac3)">⚙️ Настройка Firebase для реального времени:</strong><br>
+  1. Зайди на <a href="https://console.firebase.google.com" target="_blank" style="color:var(--ac)">console.firebase.google.com</a> → создай проект<br>
+  2. Firestore Database → Create database → Start in test mode<br>
+  3. Project settings → Web app → скопируй firebaseConfig<br>
+  4. Вставь данные в начало &lt;script type="module"&gt; в коде файла<br>
+  <span style="color:var(--txd)">До настройки лидерборд работает через localStorage (только локально).</span>
+</div>
+<h3>➕ Новое задание</h3>
+    <div class="admin-form">
+      <label>Тип задания</label>
+      <select id="adm-type">
+        <option value="email">📧 Email</option>
+        <option value="sms">📱 SMS</option>
+        <option value="url">🔗 URL</option>
+        <option value="quiz">❓ Quiz</option>
+      </select>
+      <label>Название задания</label>
+      <input type="text" id="adm-title" placeholder="Например: Поддельное письмо от банка ВТБ">
+      <label>Описание / Текст письма</label>
+      <textarea id="adm-body" placeholder="Введите текст фишингового письма или описание задания..."></textarea>
+      <label>Правильный ответ (phishing / safe)</label>
+      <select id="adm-answer">
+        <option value="phishing">🚩 Фишинг</option>
+        <option value="safe">✅ Безопасное</option>
+      </select>
+      <label>Объяснение ответа</label>
+      <textarea id="adm-explanation" placeholder="Почему это фишинг/безопасное письмо?"></textarea>
+      <label>Сложность</label>
+      <select id="adm-diff">
+        <option value="easy">🟢 Лёгкое</option>
+        <option value="med">🟡 Среднее</option>
+        <option value="hard">🔴 Сложное</option>
+      </select>
+      <button class="admin-btn" onclick="saveTask()">💾 Сохранить задание</button>
+    </div>
+  </div>
+
+  <div class="admin-tp" id="at2">
+    <h3>📋 Сохранённые задания</h3>
+    <div class="admin-list" id="adminTaskList"></div>
+    <div id="adminTaskEmpty" style="color:var(--txd);font-size:.9rem">Нет добавленных заданий. Добавьте первое задание во вкладке «Добавить задание».</div>
+  </div>
+
+  <div class="admin-tp" id="at3">
+    <h3>📊 Результаты игроков</h3>
+    <div style="margin-bottom:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="score-stat" id="adminTotalSessions">Сессий: —</span>
+      <span class="score-stat" id="adminAvgScore">Ср. результат: —</span>
+      <button style="background:rgba(255,71,87,.15);border:1px solid rgba(255,71,87,.3);color:var(--ac2);padding:6px 14px;border-radius:8px;cursor:pointer;font-weight:700;font-size:.82rem" onclick="clearResults()">🗑️ Очистить</button>
+    </div>
+    <div id="adminResultsTable"></div>
+  </div>
+
+  <div class="admin-tp" id="at4">
+    <h3>👥 Все игроки</h3>
+    <div style="margin-bottom:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="score-stat" id="adminPlayerCount">Игроков: —</span>
+      <button style="background:rgba(255,71,87,.15);border:1px solid rgba(255,71,87,.3);color:var(--ac2);padding:6px 14px;border-radius:8px;cursor:pointer;font-weight:700;font-size:.82rem" onclick="clearLeaderboard()">🗑️ Сбросить рейтинг</button>
+    </div>
+    <div id="adminPlayersTable"></div>
+  </div>
+</div>
+</section>
+
+<footer class="footer">
+  <p>🛡️ Интерактивный тренажёр «Phishing Simulator»</p>
+  <p style="margin-top:.5rem;font-size:.85rem;color:var(--txd)">Cyber Security Awareness Training — Учись распознавать фишинг до того, как станешь жертвой</p>
+  <p style="margin-top:.4rem;font-size:.8rem;color:var(--txd)">Автор: студент группы ДЗИ-11 Кехаев Кирилл</p>
+</footer>
+
+<script>
+// ===== AUTH & LOGIN =====
+const ADMIN_USER='admin';
+const ADMIN_PASS='phish2024';
+let currentUser=null;
+let isAdmin=false;
+
+function doLogin(){
+  const name=document.getElementById('loginName').value.trim();
+  if(!name){document.getElementById('loginName').style.borderColor='rgba(255,71,87,.5)';return;}
+  currentUser=name;
+  document.getElementById('loginOverlay').style.display='none';
+  document.getElementById('navUser').style.display='flex';
+  document.getElementById('navUserName').textContent=name;
+  document.getElementById('xpHud').querySelector('.xp-icon').title='Привет, '+name+'!';
+  startLbListener();
+}
+
+function toggleAdminLogin(){
+  const f=document.getElementById('adminLoginForm');
+  f.classList.toggle('show');
+}
+
+function doAdminLogin(){
+  const u=document.getElementById('adminLoginUser').value.trim();
+  const p=document.getElementById('adminLoginPass').value;
+  const err=document.getElementById('adminLoginErr');
+  if(u===ADMIN_USER&&p===ADMIN_PASS){
+    isAdmin=true;currentUser='Администратор';
+    document.getElementById('loginOverlay').style.display='none';
+    document.getElementById('navUser').style.display='flex';
+    document.getElementById('navUserName').textContent='👑 Администратор';
+    document.getElementById('admin').style.display='block';
+    document.getElementById('adminNavLink').style.display='';
+    startLbListener();
+  }else{
+    err.style.display='block';
+    document.getElementById('adminLoginUser').style.borderColor='rgba(255,71,87,.5)';
+    document.getElementById('adminLoginPass').style.borderColor='rgba(255,71,87,.5)';
+  }
+}
+
+document.getElementById('loginName').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+
+// hide admin section by default for non-admins — will show after admin login
+// (admin section always visible in HTML but we keep it — admins navigate there)
+
+// ===== LEADERBOARD (real-time via BroadcastChannel + storage event) =====
+const LB_KEY = 'phish_leaderboard';
+
+// BroadcastChannel syncs between tabs on the same origin/domain
+const lbChannel = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('phish_lb') : null;
+if(lbChannel) lbChannel.onmessage = () => renderLeaderboard();
+
+// storage event syncs between different windows/tabs too
+window.addEventListener('storage', e => { if(e.key === LB_KEY) renderLeaderboard(); });
+
+function getLeaderboard(){
+  try{return JSON.parse(localStorage.getItem(LB_KEY)||'[]')}catch{return[]}
+}
+function saveLeaderboard(lb){
+  localStorage.setItem(LB_KEY, JSON.stringify(lb));
+  // notify other tabs
+  if(lbChannel) lbChannel.postMessage('update');
+}
+
+function addToLeaderboard(name, score, total, pct, xp){
+  const lb = getLeaderboard();
+  const idx = lb.findIndex(e => e.name === name);
+  const entry = {name, score, total, pct, xp, date: new Date().toLocaleString('ru')};
+  if(idx >= 0){
+    if(pct > lb[idx].pct) lb[idx] = entry; // keep best result
+  } else {
+    lb.push(entry);
+  }
+  lb.sort((a,b) => b.pct - a.pct || b.xp - a.xp);
+  saveLeaderboard(lb);
+  renderLeaderboard();
+}
+
+function renderLeaderboard(){
+  const lb = getLeaderboard();
+  const body = document.getElementById('leaderboardBody');
+  if(!lb.length){
+    body.innerHTML='<div class="lb-empty">Пока нет результатов. Пройди тест первым!</div>';
+    return;
+  }
+  const medals = ['r1','r2','r3'];
+  const me = currentUser || '';
+  body.innerHTML = lb.map((e,i) => `
+    <div class="lb-row" ${e.name===me ? 'style="background:rgba(0,229,255,.06);border-left:3px solid var(--ac)"' : ''}>
+      <div class="lb-rank ${medals[i]||'rn'}">${i<3?['🥇','🥈','🥉'][i]:i+1}</div>
+      <div class="lb-name">${esc(e.name)}${e.name===me?' <span style="color:var(--ac);font-size:.72rem">(ты)</span>':''}</div>
+      <div class="lb-score">${e.score}/${e.total} <span class="lb-pct">(${e.pct}%)</span></div>
+      <div style="font-size:.78rem;color:var(--ac3);margin-left:8px;font-family:'JetBrains Mono',monospace">⚡${e.xp} XP</div>
+    </div>
+  `).join('');
+  // also update admin players table if open
+  if(isAdmin) renderAdminPlayers();
+}
+
+// poll every 5s as fallback (useful if BroadcastChannel not supported or cross-subdomain)
+setInterval(renderLeaderboard, 5000);
+
+function startLbListener(){
+  renderLeaderboard();
+}
+
+function clearLeaderboard(){
+  if(!confirm('Очистить весь рейтинг?'))return;
+  localStorage.removeItem(LB_KEY);
+  if(lbChannel) lbChannel.postMessage('update');
+  renderLeaderboard();
+  renderAdminPlayers();
+}
+
+function renderAdminPlayers(){
+  const lb = getLeaderboard();
+  const el = document.getElementById('adminPlayersTable');
+  if(!el) return;
+  document.getElementById('adminPlayerCount').textContent = 'Игроков: ' + lb.length;
+  if(!lb.length){el.innerHTML='<p style="color:var(--txd);font-size:.9rem">Нет зарегистрированных игроков.</p>';return;}
+  el.innerHTML = `<table class="results-table"><thead><tr><th>#</th><th>Имя</th><th>Результат</th><th>%</th><th>XP</th><th>Дата</th></tr></thead><tbody>`+
+    lb.map((e,i)=>`<tr><td>${i+1}</td><td><strong>${esc(e.name)}</strong></td><td>${e.score}/${e.total}</td><td style="color:${e.pct>=70?'var(--ok)':'var(--err)'}">${e.pct}%</td><td style="color:var(--ac3)">${e.xp}</td><td style="color:var(--txd);font-size:.78rem">${e.date}</td></tr>`).join('')+
+    `</tbody></table>`;
+}
+
+// ===== THEME =====
+const themeBtn=document.getElementById('themeBtn');
+const heroThemeBtn=document.getElementById('heroThemeBtn');
+const darkVars={'--bg':'#0a0f1a','--sf':'#111827','--sf2':'#1a2235','--tx':'#e8eaf0','--txd':'#7a8499','--cb':'#0d1520','--border':'rgba(255,255,255,.06)','--nav-bg':'rgba(10,15,26,.92)','--hero-g1':'rgba(0,229,255,.12)','--hero-g2':'rgba(255,71,87,.1)','--grid-c':'rgba(0,229,255,.04)','--code-hdr':'rgba(255,255,255,.03)','--code-sep':'rgba(255,255,255,.05)','--ac':'#00e5ff','--ac2':'#ff4757','--ac3':'#ffd93d','--ac4':'#2ed573','--ok':'#2ed573','--err':'#ff4757'};
+const lightVars={'--bg':'#f0f4f8','--sf':'#ffffff','--sf2':'#e8eef5','--tx':'#1a2235','--txd':'#5a6880','--cb':'#e4eaf2','--border':'rgba(0,0,0,.08)','--nav-bg':'rgba(240,244,248,.92)','--hero-g1':'rgba(0,144,168,.08)','--hero-g2':'rgba(204,34,51,.07)','--grid-c':'rgba(0,144,168,.04)','--code-hdr':'rgba(0,0,0,.03)','--code-sep':'rgba(0,0,0,.06)','--ac':'#0090a8','--ac2':'#cc2233','--ac3':'#c49000','--ac4':'#1a9e50','--ok':'#1a9e50','--err':'#cc2233'};
+function setTheme(t){
+  document.documentElement.setAttribute('data-theme',t);
+  const vars=t==='dark'?darkVars:lightVars;
+  for(const[k,v]of Object.entries(vars))document.documentElement.style.setProperty(k,v);
+  document.body.style.backgroundColor=vars['--bg'];
+  document.body.style.color=vars['--tx'];
+  const icon=t==='dark'?'🌙':'☀️';
+  themeBtn.textContent=icon;heroThemeBtn.textContent=icon;
+  try{localStorage.setItem('theme',t)}catch(e){}
+}
+function toggleTheme(){setTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark')}
+themeBtn.onclick=toggleTheme;heroThemeBtn.onclick=toggleTheme;
+try{if(localStorage.getItem('theme'))setTheme(localStorage.getItem('theme'))}catch(e){}
+
+// ===== PROGRESS BAR =====
+const pBar=document.getElementById('progressBar');
+window.addEventListener('scroll',()=>{const h=document.documentElement.scrollHeight-window.innerHeight;pBar.style.width=h>0?(scrollY/h*100)+'%':'0%'});
+
+// ===== TABS =====
+document.querySelectorAll('.tabs').forEach(g=>{g.querySelectorAll('.tb').forEach(b=>{b.onclick=()=>{const t=b.dataset.tab,p=g.parentElement;g.querySelectorAll('.tb').forEach(x=>x.classList.remove('active'));b.classList.add('active');p.querySelectorAll('.tp').forEach(x=>x.classList.remove('active'));p.querySelector('#'+t).classList.add('active')}})});
+
+// ===== ADMIN TABS =====
+document.querySelectorAll('.admin-tb').forEach(b=>{b.onclick=()=>{const t=b.dataset.atab;document.querySelectorAll('.admin-tb').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.admin-tp').forEach(x=>x.classList.remove('active'));document.getElementById(t).classList.add('active');if(t==='at2')renderTaskList();if(t==='at3')renderResults();if(t==='at4')renderAdminPlayers()}});
+
+// ===== SCROLL ANIM =====
+const obs=new IntersectionObserver(e=>{e.forEach(x=>{if(x.isIntersecting)x.target.classList.add('vis')})},{threshold:.08});
+document.querySelectorAll('.fin').forEach(el=>obs.observe(el));
+
+// ===== NAV HIGHLIGHT =====
+const allSec=document.querySelectorAll('.sec'),allNav=document.querySelectorAll('.nav a');
+window.addEventListener('scroll',()=>{let c='';allSec.forEach(s=>{if(scrollY>=s.offsetTop-120)c=s.id});allNav.forEach(a=>{a.classList.toggle('active',a.getAttribute('href')==='#'+c)})});
+
+// ===== XP SYSTEM =====
+let totalXP=0;
+const XP_LEVELS=[{min:0,name:'Новобранец'},{min:50,name:'Стажёр'},{min:100,name:'Аналитик'},{min:200,name:'Детектив'},{min:350,name:'Эксперт'},{min:500,name:'Мастер'}];
+function addXP(amount){
+  totalXP+=amount;
+  document.getElementById('xpVal').textContent=totalXP+' XP';
+  const fill=Math.min((totalXP%200)/200*100,100);
+  document.getElementById('xpBarFill').style.width=fill+'%';
+  const lvl=XP_LEVELS.filter(l=>totalXP>=l.min).pop();
+  document.getElementById('levelBadge').textContent=lvl.name;
+  document.getElementById('trainerXP').textContent=totalXP;
+  // floating +XP
+  const el=document.createElement('div');
+  el.textContent='+'+amount+' XP';
+  el.style.cssText='position:fixed;bottom:60px;right:20px;background:var(--ac3);color:#000;font-weight:900;font-size:.9rem;padding:6px 14px;border-radius:20px;z-index:300;animation:fi .4s ease,fadeOut 1s 1s forwards;pointer-events:none';
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),2000);
+}
+let trainerCorrect=0,trainerWrong=0;
+
+// ===== TRAINER CHALLENGES =====
+function answerChallenge(id,isCorrect,btn,feedback,xp){
+  const fbEl=document.getElementById(id+'-fb');
+  const allBtns=btn.parentElement.querySelectorAll('.ch-choice');
+  allBtns.forEach(b=>b.style.pointerEvents='none');
+  if(isCorrect){
+    btn.classList.add('selected-right');
+    fbEl.className='ch-feedback show ok';
+    trainerCorrect++;
+    document.getElementById('trainerCorrect').textContent=trainerCorrect;
+    addXP(xp);
+  }else{
+    btn.classList.add('selected-wrong');
+    fbEl.className='ch-feedback show bad';
+    trainerWrong++;
+    document.getElementById('trainerWrong').textContent=trainerWrong;
+    // find and show correct answer
+    const siblings=Array.from(allBtns);
+    // highlight the right one
+    if(id==='ch1'||id==='ch2'){
+      siblings.forEach(b=>{
+        if((b.classList.contains('safe-btn')&&id==='ch1')||(b.classList.contains('phish-btn')&&id==='ch2'))b.classList.add('reveal-right');
+      });
+    }
+  }
+  fbEl.textContent=feedback;
+  saveResult(id,isCorrect,xp);
+}
+
+// Find game
+let fgFound=0;
+const fgPhishTargets=['fg-s1','fg-s2','fg-s4','fg-s5'];
+function markTarget(el){
+  if(el.classList.contains('found')||el.classList.contains('missed'))return;
+  el.classList.add('found');
+  fgFound++;
+  document.getElementById('fg-found').textContent=fgFound;
+}
+function checkFindGame(){
+  let correct=0;
+  fgPhishTargets.forEach(id=>{
+    const el=document.getElementById(id);
+    if(el.classList.contains('found'))correct++;
+  });
+  // mark not-found phishing ones
+  fgPhishTargets.forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el.classList.contains('found'))el.classList.add('missed');
+  });
+  // mark wrong clicks (non-phish clicked)
+  document.querySelectorAll('.marker-target').forEach(el=>{
+    if(el.dataset.isPhish==='false'&&el.classList.contains('found')){
+      el.classList.remove('found');
+      el.style.background='rgba(255,217,61,.15)';
+      el.style.borderColor='var(--ac3)';
+    }
+  });
+  const fb=document.getElementById('ch3-fb');
+  if(correct===4){
+    fb.className='ch-feedback show ok';
+    fb.textContent='✅ Отлично! Ты нашёл все 4 признака фишинга: поддельный домен отправителя, запрос CVC-кода, искусственная срочность и мошеннический URL.';
+    addXP(40);trainerCorrect++;
+    document.getElementById('trainerCorrect').textContent=trainerCorrect;
+  }else{
+    fb.className='ch-feedback show bad';
+    fb.textContent='❌ Найдено '+correct+' из 4. Пропущенные признаки подсвечены жёлтым. Попробуй ещё раз!';
+    if(correct>=2){addXP(10);}
+    trainerWrong++;document.getElementById('trainerWrong').textContent=trainerWrong;
+  }
+  document.querySelectorAll('.marker-target').forEach(el=>{el.onclick=null;el.style.cursor='default'});
+  saveResult('ch3',correct===4,40);
+}
+
+// ===== ACCORDION =====
+function toggleAcc(hdr){
+  const item=hdr.parentElement;
+  item.classList.toggle('open');
+}
+
+// ===== DEBUGGER (Analyzer) =====
+const D={};
+const P1=[
+  'От: security@sberbank-verify-alert.com',
+  'Кому: victim@mail.ru',
+  'Тема: СРОЧНО! Ваш счёт заблокирован',
+  '',
+  '--- Анализ письма ---',
+  '',
+  'ШАГ 1: Проверяем домен отправителя',
+  '  Домен: sberbank-verify-alert.com',
+  '  Ожидается: sberbank.ru',
+  '',
+  'ШАГ 2: Анализируем тему письма',
+  '  Найдено: "СРОЧНО" — триггер срочности',
+  '',
+  'ШАГ 3: Проверяем ссылки в письме',
+  '  http://sbrf-secure.verify-login.xyz',
+  '',
+  'ВЕРДИКТ: ФИШИНГ 🚩'
+];
+const P2=[
+  'URL: https://sberbank.ru.secure-login.com/pay',
+  '',
+  '--- Разбор структуры URL ---',
+  '',
+  'ШАГ 1: Ищем протокол',
+  '  https:// → есть шифрование ✓',
+  '',
+  'ШАГ 2: Определяем главный домен',
+  '  Части: sberbank.ru / secure-login.com / /pay',
+  '  Главный домен (перед первым /): secure-login.com',
+  '',
+  'ШАГ 3: Сравниваем с официальным',
+  '  Официальный: sberbank.ru',
+  '  Найден: secure-login.com — НЕ совпадает!',
+  '',
+  'ВЕРДИКТ: ФИШИНГ 🚩 (sberbank.ru — поддомен!)'
+];
+
+function iD(id){
+  const code=id===1?[...P1]:[...P2];
+  const el=document.getElementById('dc'+id);
+  el.innerHTML=code.map((l,i)=>`<div class="dline" data-l="${i}"><span class="dlinenum">${i+1}</span><span class="dlinetext">${l===''?' ':esc(l)}</span></div>`).join('');
+  D[id]={s:-1,vars:{},out:[],msg:'Нажмите «Шаг» для начала анализа',done:false};
+}
+function uP(id){
+  const s=D[id];let vh='';
+  for(const[k,v]of Object.entries(s.vars))vh+=`<div class="dvar"><span class="dn">${k}</span><span class="dv">${v}</span></div>`;
+  document.getElementById('dv'+id).innerHTML=vh||'<span style="color:var(--txd);font-size:.8rem">—</span>';
+  document.getElementById('do'+id).innerHTML=s.out.map(l=>`<div class="dcl ${l.warn?'warn':''}">${esc(String(l.text||l))}</div>`).join('');
+  document.getElementById('dm'+id).textContent=s.msg;
+}
+function hL(id,n){document.getElementById('dc'+id).querySelectorAll('.dline').forEach(l=>l.classList.remove('hl'));const ls=document.getElementById('dc'+id).querySelectorAll('.dline');if(n>=0&&n<ls.length)ls[n].classList.add('hl')}
+function eL(id,n){const ls=document.getElementById('dc'+id).querySelectorAll('.dline');if(n>=0&&n<ls.length)ls[n].classList.add('ex')}
+function ds(id){
+  const s=D[id];if(s.done)return;s.s++;const i=s.s;
+  if(id===1){
+    if(i===0){hL(1,0);s.msg='Считываем адрес отправителя'}
+    else if(i===1){eL(1,0);hL(1,2);s.msg='Считываем тему письма'}
+    else if(i===2){eL(1,2);hL(1,6);s.msg='Начинаем анализ — шаг 1'}
+    else if(i===3){eL(1,6);hL(1,7);s.vars['Домен']='sberbank-verify-alert.com';s.msg='Извлекаем домен отправителя'}
+    else if(i===4){eL(1,7);hL(1,8);s.vars['Ожидается']='sberbank.ru';s.msg='Сравниваем с официальным доменом'}
+    else if(i===5){eL(1,8);hL(1,10);s.out.push({text:'⚠️ Домен не совпадает с sberbank.ru!',warn:true});s.msg='Несовпадение домена — подозрительно!'}
+    else if(i===6){eL(1,10);hL(1,11);s.msg='Анализируем тему письма'}
+    else if(i===7){eL(1,11);hL(1,13);s.out.push({text:'⚠️ Триггер срочности обнаружен',warn:true});s.msg='Слово СРОЧНО — классический фишинговый приём'}
+    else if(i===8){eL(1,13);hL(1,14);s.msg='Проверяем ссылки'}
+    else if(i===9){eL(1,14);hL(1,15);s.out.push({text:'⚠️ Подозрительный домен ссылки',warn:true});s.vars['Результат']='ФИШИНГ';s.msg='Домен ссылки не официальный'}
+    else if(i===10){eL(1,15);hL(1,16);s.out.push({text:'🚩 ВЕРДИКТ: ФИШИНГ',warn:true});s.msg='Анализ завершён — письмо является фишинговым';s.done=true}
+  }else{
+    if(i===0){hL(2,0);s.msg='Считываем URL для анализа'}
+    else if(i===1){eL(2,0);hL(2,4);s.msg='Шаг 1: проверяем протокол'}
+    else if(i===2){eL(2,4);hL(2,5);s.vars['Протокол']='https://';s.out.push({text:'✓ HTTPS присутствует'});s.msg='HTTPS есть, но это не гарантирует безопасность!'}
+    else if(i===3){eL(2,5);hL(2,7);s.msg='Шаг 2: определяем главный домен'}
+    else if(i===4){eL(2,7);hL(2,8);s.vars['Главный домен']='secure-login.com';s.msg='Главный домен — последнее слово перед первым /'}
+    else if(i===5){eL(2,8);hL(2,11);s.msg='Шаг 3: сравниваем с официальным'}
+    else if(i===6){eL(2,11);hL(2,12);s.out.push({text:'⚠️ secure-login.com ≠ sberbank.ru',warn:true});s.msg='Официальный домен Сбербанка — sberbank.ru'}
+    else if(i===7){eL(2,12);hL(2,14);s.out.push({text:'🚩 ВЕРДИКТ: ФИШИНГ',warn:true});s.vars['Вердикт']='ФИШИНГ';s.msg='URL является фишинговым. sberbank.ru — лишь поддомен!';s.done=true}
+  }
+  uP(id);
+}
+function dr(id){iD(id);document.getElementById('dc'+id).querySelectorAll('.dline').forEach(l=>{l.classList.remove('hl','ex')});uP(id)}
+function da(id){if(D[id].done)dr(id);const iv=setInterval(()=>{if(D[id].done){clearInterval(iv);return}ds(id)},900)}
+iD(1);iD(2);
+
+// ===== QUIZ =====
+const QD=[
+  {q:'Что такое фишинг?',o:['Техника взлома серверов','Обман пользователей для кражи данных','Вид компьютерного вируса','Метод DDoS-атаки'],a:1,f:'Фишинг — это вид социальной инженерии, при котором злоумышленники обманом заставляют жертву передать конфиденциальные данные, перейти на поддельный сайт или установить вредоносное ПО.'},
+  {q:'Какой домен является официальным для Сбербанка?',o:['sberbank-online.ru','secure-sberbank.com','sberbank.ru','sbrf-secure.online'],a:2,f:'Официальный домен Сбербанка — sberbank.ru. Любые другие домены, содержащие слово «sberbank» в другом месте — поддельные.'},
+  {q:'Ты получил SMS: «Ваша карта заблокирована. Перейдите: bank-verify.site». Что делать?',o:['Перейти по ссылке и проверить','Позвонить по номеру на обороте карты','Ответить на SMS с данными карты','Переслать SMS другу для проверки'],a:1,f:'При подозрительных сообщениях всегда звони по официальному номеру банка (он указан на карте или сайте банка), никогда не переходи по ссылкам из SMS.'},
+  {q:'Какой из этих URL является фишинговым?',o:['https://gosuslugi.ru','https://accounts.google.com','https://google.com.account-verify.site','https://mail.ru'],a:2,f:'В URL "google.com.account-verify.site" настоящий домен — account-verify.site. Google.com — лишь поддомен. Главный домен всегда определяется как слово перед первым символом /.'},
+  {q:'Тебе звонят «из банка» и просят назвать код из SMS. Это:',o:['Стандартная процедура безопасности','Попытка мошенничества (вишинг)','Тест системы безопасности','Обновление аккаунта'],a:1,f:'Банки НИКОГДА не просят называть SMS-коды по телефону. Это классический вишинг (голосовой фишинг). Код из SMS нужен мошенникам для авторизации в твоём аккаунте.'},
+  {q:'Письмо начинается «Уважаемый клиент!» вместо твоего имени. Это:',o:['Нормально, банки так пишут','Признак фишинга — отсутствие персонализации','Технический сбой','Зависит от банка'],a:1,f:'Легитимные организации обычно обращаются по имени (которое знают из базы клиентов). «Уважаемый клиент» — признак массовой фишинговой рассылки, где мошенники не знают твоего имени.'},
+  {q:'Что означает HTTP вместо HTTPS в адресе сайта?',o:['Соединение быстрее','Соединение НЕ зашифровано — данные могут перехватить','Сайт заблокирован','Старая версия сайта'],a:1,f:'HTTPS шифрует данные между браузером и сервером. HTTP — нет. На сайте с HTTP твои пароли и данные карты могут быть перехвачены. Но даже HTTPS не гарантирует легитимность сайта!'},
+  {q:'Smishing — это:',o:['Вирус для смартфонов','Фишинг через SMS-сообщения','Взлом Wi-Fi сетей','Поддельное мобильное приложение'],a:1,f:'Smishing = SMS + Phishing. Мошенники отправляют SMS с тревожными сообщениями и ссылками на поддельные сайты или вредоносные приложения.'},
+  {q:'Ты нашёл USB-флешку на парковке с надписью «Зарплаты сотрудников». Что делать?',o:['Подключить к рабочему компьютеру — интересно!','Ничего не делать с флешкой или сдать в IT-отдел','Отформатировать и использовать','Подключить к личному телефону'],a:1,f:'Это классическая атака "Baiting" (приманка). Флешки намеренно оставляют в людных местах. При подключении они могут заразить компьютер вирусом или установить бэкдор.'},
+  {q:'В письме от "Apple" просят ввести данные карты для "подтверждения аккаунта". Первое, что надо сделать:',o:['Ввести данные — Apple им нужны','Проверить адрес отправителя','Позвонить другу','Игнорировать все письма от Apple'],a:1,f:'Первый шаг — всегда проверить адрес отправителя. Официальные письма Apple приходят с домена @apple.com. Если домен другой — фишинг. И помни: Apple не запрашивает данные карты по email.'},
+  {q:'Ты получил письмо с темой «Вы выиграли iPhone 15!». Скорее всего:',o:['Ты действительно выиграл','Это фишинг / мошенничество','Это реклама, можно открыть','Это письмо от Apple'],a:1,f:'«Вы выиграли приз» — классическая фишинговая приманка, эксплуатирующая жадность. Если ты не участвовал ни в каком конкурсе, выиграть ничего нельзя. Письмо ведёт на поддельный сайт.'},
+  {q:'Признаки поддельной страницы входа (несколько верных):',o:['URL не совпадает с официальным сайтом','Страница выглядит точно как настоящая','HTTP вместо HTTPS','Запрашивает дополнительные данные (CVV, PIN)'],a:0,f:'Главный признак — несовпадение URL. Внешний вид может быть идентичен настоящему (мошенники копируют дизайн). HTTP и запрос лишних данных тоже являются признаками, но URL — самый надёжный индикатор.'},
+  {q:'Что такое «спир-фишинг» (Spear Phishing)?',o:['Атака на корпоративные серверы','Целевая атака, настроенная под конкретного человека','Атака через спам','Вирус-шпион'],a:1,f:'Spear Phishing — целенаправленный фишинг. Мошенники собирают информацию о конкретной жертве (имя, должность, связи) и создают персонализированное письмо. Гораздо опаснее массового фишинга.'},
+  {q:'Ты перешёл по ссылке и оказался на странице входа в Госуслуги. Что СНАЧАЛА надо проверить?',o:['Дизайн страницы','URL в адресной строке браузера','Наличие поля для пароля','Есть ли кнопка «Войти»'],a:1,f:'Дизайн можно подделать идеально. Настоящий URL проверить надёжнее всего. Госуслуги — gosuslugi.ru. Любой другой домен — подделка.'},
+  {q:'Что делать, если случайно ввёл данные карты на подозрительном сайте?',o:['Ждать и наблюдать','Немедленно заблокировать карту и позвонить в банк','Сменить пароль от соцсетей','Перезагрузить компьютер'],a:1,f:'При компрометации данных карты — немедленно заблокировать карту (через приложение или звонок в банк по официальному номеру), сообщить о мошенничестве. Банк выпустит новую карту. Время имеет значение!'},
+];
+
+let qScore=0,qAnswered=0,wrongIdx=[];let currentQSet=null;
+function renderQuiz(indices){
+  const cont=document.getElementById('qcont');
+  const set=indices||QD.map((_,i)=>i);
+  currentQSet=set;qScore=0;qAnswered=0;wrongIdx=[];
+  document.getElementById('qresult').classList.remove('show');
+  cont.innerHTML=set.map((qi,di)=>{const q=QD[qi];
+    return `<div class="qcard" id="qq${qi}" data-qi="${qi}"><div class="qq"><span class="qn">${di+1}</span> ${q.q}</div><div class="qos">${q.o.map((o,j)=>`<div class="qo" onclick="qA(${qi},${j})"><span class="lt">${'ABCD'[j]}</span><span>${esc(o)}</span></div>`).join('')}</div><div class="qfb" id="qf${qi}"></div></div>`;
+  }).join('');
+}
+function qA(qi,oi){
+  const card=document.getElementById('qq'+qi);if(card.dataset.done)return;card.dataset.done='1';qAnswered++;
+  const q=QD[qi],ok=oi===q.a;if(ok){qScore++;addXP(10);}else wrongIdx.push(qi);
+  card.querySelectorAll('.qo').forEach((o,j)=>{o.classList.add('off');if(j===q.a)o.classList.add('qok');if(j===oi&&!ok)o.classList.add('qwr')});
+  const fb=document.getElementById('qf'+qi);fb.className='qfb show '+(ok?'qfc':'qfw');fb.textContent=(ok?'✅ Верно! ':'❌ Неверно. ')+q.f;
+  if(qAnswered===currentQSet.length)showQuizResult();
+}
+function showQuizResult(){
+  const total=currentQSet.length,pct=Math.round(qScore/total*100);
+  let emoji='🏆',msg='Эксперт по кибербезопасности!';
+  if(pct<100){emoji='🎉';msg='Отличный результат!'}if(pct<70){emoji='📚';msg='Стоит повторить теорию'}if(pct<50){emoji='💪';msg='Продолжай учиться — знания спасут от мошенников!'}
+  document.getElementById('qemoji').textContent=emoji;
+  document.getElementById('qscore').textContent=qScore+' из '+total+' правильно ('+pct+'%)';
+  document.getElementById('qmsg').textContent=msg;
+  document.getElementById('retryBtn').style.display=wrongIdx.length>0?'inline-block':'none';
+  document.getElementById('qresult').classList.add('show');
+  document.getElementById('qresult').scrollIntoView({behavior:'smooth',block:'center'});
+  // save result
+  const results=getResults();
+  const name=currentUser||'Аноним';
+  results.push({date:new Date().toLocaleString('ru'),name,score:qScore,total,pct,xp:totalXP});
+  localStorage.setItem('phish_results',JSON.stringify(results));
+  // add to leaderboard
+  addToLeaderboard(name,qScore,total,pct,totalXP);
+}
+function retryWrong(){renderQuiz(wrongIdx);document.getElementById('quiz').scrollIntoView({behavior:'smooth'})}
+function resetQuiz(){renderQuiz(null);document.getElementById('quiz').scrollIntoView({behavior:'smooth'})}
+renderQuiz(null);
+
+// ===== HELPER =====
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+// ===== ADMIN =====
+function getTasks(){try{return JSON.parse(localStorage.getItem('phish_tasks')||'[]')}catch{return[]}}
+function saveTasks(t){localStorage.setItem('phish_tasks',JSON.stringify(t))}
+function getResults(){try{return JSON.parse(localStorage.getItem('phish_results')||'[]')}catch{return[]}}
+function saveResult(challengeId,correct,xp){
+  const all=getResults();
+  all.push({date:new Date().toLocaleString('ru'),challenge:challengeId,correct,xp:correct?xp:0});
+  localStorage.setItem('phish_results',JSON.stringify(all));
+}
+
+function saveTask(){
+  const type=document.getElementById('adm-type').value;
+  const title=document.getElementById('adm-title').value.trim();
+  const body=document.getElementById('adm-body').value.trim();
+  const answer=document.getElementById('adm-answer').value;
+  const explanation=document.getElementById('adm-explanation').value.trim();
+  const diff=document.getElementById('adm-diff').value;
+  if(!title||!body){alert('Заполните название и текст задания');return;}
+  const tasks=getTasks();
+  tasks.push({id:Date.now(),type,title,body,answer,explanation,diff,created:new Date().toLocaleString('ru')});
+  saveTasks(tasks);
+  document.getElementById('adm-title').value='';
+  document.getElementById('adm-body').value='';
+  document.getElementById('adm-explanation').value='';
+  alert('✅ Задание сохранено!');
+}
+
+function renderTaskList(){
+  const tasks=getTasks();
+  const list=document.getElementById('adminTaskList');
+  const empty=document.getElementById('adminTaskEmpty');
+  if(tasks.length===0){list.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  list.innerHTML=tasks.map(t=>`
+    <div class="admin-item">
+      <div>
+        <strong>${esc(t.title)}</strong>
+        <span style="color:var(--txd);font-size:.78rem;margin-left:8px">[${t.type}] ${t.diff}</span>
+        <br><span style="color:var(--txd);font-size:.78rem">${t.created}</span>
+      </div>
+      <button class="ai-del" onclick="deleteTask(${t.id})">🗑️ Удалить</button>
+    </div>
+  `).join('');
+}
+
+function deleteTask(id){
+  if(!confirm('Удалить задание?'))return;
+  const tasks=getTasks().filter(t=>t.id!==id);
+  saveTasks(tasks);renderTaskList();
+}
+
+function renderResults(){
+  const results=getResults();
+  const table=document.getElementById('adminResultsTable');
+  document.getElementById('adminTotalSessions').textContent='Сессий: '+results.length;
+  if(results.length>0){
+    const qr=results.filter(r=>r.pct!==undefined);
+    const avg=qr.length?Math.round(qr.reduce((s,r)=>s+(r.pct||0),0)/qr.length):0;
+    document.getElementById('adminAvgScore').textContent='Ср. результат: '+avg+'%';
+  }
+  if(results.length===0){table.innerHTML='<p style="color:var(--txd);font-size:.9rem">Нет данных о результатах.</p>';return;}
+  const quizResults=results.filter(r=>r.total);
+  if(quizResults.length===0){table.innerHTML='<p style="color:var(--txd);font-size:.9rem">Нет завершённых квизов.</p>';return;}
+  table.innerHTML=`<table class="results-table"><thead><tr><th>Игрок</th><th>Дата</th><th>Результат</th><th>%</th><th>XP</th></tr></thead><tbody>`+
+    quizResults.slice().reverse().map(r=>`<tr><td><strong>${esc(r.name||'Аноним')}</strong></td><td style="font-size:.78rem;color:var(--txd)">${r.date}</td><td>${r.score}/${r.total}</td><td style="color:${r.pct>=70?'var(--ok)':'var(--err)'}">${r.pct}%</td><td style="color:var(--ac3)">${r.xp}</td></tr>`).join('')+
+    `</tbody></table>`;
+}
+
+function clearResults(){
+  if(!confirm('Очистить все результаты?'))return;
+  localStorage.removeItem('phish_results');
+  renderResults();
+  document.getElementById('adminTotalSessions').textContent='Сессий: 0';
+  document.getElementById('adminAvgScore').textContent='Ср. результат: —';
+}
+
+// ===== BURGER MENU =====
+function toggleBurger(){
+  document.getElementById('navLinks').classList.toggle('open');
+}
+function closeBurger(){
+  document.getElementById('navLinks').classList.remove('open');
+}
+// close on outside click
+document.addEventListener('click',function(e){
+  if(!e.target.closest('#mainNav'))closeBurger();
+});
+</script>
+</body>
+</html>
